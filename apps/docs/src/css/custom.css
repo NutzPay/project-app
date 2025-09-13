@@ -1,0 +1,9 @@
+:root {
+  --ifm-color-primary: #0070f3;
+  --ifm-font-family-base: system-ui, sans-serif;
+}
+
+h1, h2, h3 {
+  font-weight: 600;
+}
+
