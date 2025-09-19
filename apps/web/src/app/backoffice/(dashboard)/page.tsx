@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Users, TrendingUp, DollarSign, Activity, History, CheckCircle2, Clock, XCircle, AlertTriangle } from 'lucide-react';
+import { Users, TrendingUp, DollarSign, Activity, History, CheckCircle2, Clock, XCircle, AlertTriangle, Shield, UserCheck } from 'lucide-react';
 
 interface BackofficeStats {
   users: {
@@ -422,33 +422,33 @@ export default function BackofficePage() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900">Transações USDT</h3>
-                  <p className="text-sm text-gray-600">Depósitos e saques em cripto</p>
+                  <h3 className="text-lg font-bold text-gray-900">Compras de USDT</h3>
+                  <p className="text-sm text-gray-600">Aquisições de USDT via PIX</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center">
-                  <p className="text-sm font-medium text-gray-600 mb-1">Total</p>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Concluídas</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {stats?.transactions?.total?.toLocaleString() || '0'}
+                    {stats?.usdtPurchases?.completed?.toLocaleString() || '0'}
                   </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-medium text-gray-600 mb-1">Depósitos</p>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Pendentes</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {(stats?.transactions?.deposits || 0).toLocaleString('pt-BR')}
+                    {(stats?.usdtPurchases?.pending || 0).toLocaleString('pt-BR')}
                   </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-medium text-gray-600 mb-1">Saques</p>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Falhadas</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {(stats?.transactions?.withdrawals || 0).toLocaleString('pt-BR')}
+                    {(stats?.usdtPurchases?.failed || 0).toLocaleString('pt-BR')}
                   </p>
                 </div>
                 <div className="text-center">
                   <p className="text-sm font-medium text-gray-600 mb-1">Volume</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    $ {((stats?.transactions?.depositVolume || 0) + (stats?.transactions?.withdrawalVolume || 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                    R$ {(stats?.usdtPurchases?.brlVolume || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                   </p>
                 </div>
               </div>
@@ -631,13 +631,13 @@ export default function BackofficePage() {
                     <p className="text-sm text-gray-600">Aprovar, suspender ou editar usuários</p>
                   </div>
                 </Link>
-                <Link href="/backoffice/empresas" className="flex items-center p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                <Link href="/backoffice/auditoria" className="flex items-center p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
                   <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center mr-3">
-                    <TrendingUp className="w-5 h-5 text-white" />
+                    <Shield className="w-5 h-5 text-white" />
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900">Gerenciar Empresas</p>
-                    <p className="text-sm text-gray-600">Configurar planos e limites</p>
+                    <p className="font-medium text-gray-900">Auditoria</p>
+                    <p className="text-sm text-gray-600">Monitorar segurança e operações</p>
                   </div>
                 </Link>
                 <Link href="/backoffice/investimentos" className="flex items-center p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
@@ -649,13 +649,13 @@ export default function BackofficePage() {
                     <p className="text-sm text-gray-600">Monitorar aplicações e rendimentos</p>
                   </div>
                 </Link>
-                <Link href="/backoffice/auditoria" className="flex items-center p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                <Link href="/backoffice/comercial" className="flex items-center p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
                   <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center mr-3">
-                    <History className="w-5 h-5 text-white" />
+                    <UserCheck className="w-5 h-5 text-white" />
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900">Logs de Auditoria</p>
-                    <p className="text-sm text-gray-600">Rastrear atividades do sistema</p>
+                    <p className="font-medium text-gray-900">Time Comercial</p>
+                    <p className="text-sm text-gray-600">Gerenciar representantes e comissões</p>
                   </div>
                 </Link>
               </div>
