@@ -42,8 +42,8 @@ export default function DashboardPage() {
   const [banners, setBanners] = useState([
     {
       id: '1',
-      title: 'Nova API de Pagamentos',
-      subtitle: 'Conheça a integração mais rápida para sellers',
+      title: 'Cartão de Crédito',
+      subtitle: 'Tenha seu próprio cartão usando saldo da conta',
       ctaText: 'Acessar',
       imagePath: 'luxa.png',
       targetUrl: 'https://nutzpay.com/api',
@@ -524,38 +524,38 @@ export default function DashboardPage() {
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Informativos */}
+          {/* Recursos */}
           <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
             <div className="p-4 border-b border-gray-100">
-              <h4 className="font-bold text-black text-sm">Informativos</h4>
+              <h4 className="font-bold text-black text-sm">Recursos</h4>
             </div>
             <div className="space-y-1">
-              <div className="p-4 hover:bg-gray-50 transition-colors cursor-pointer border-l-4 border-red-500">
+              <div className="p-4 hover:bg-gray-50 transition-colors cursor-pointer border-l-4 border-red-500" onClick={() => window.location.href = '/dashboard/cartoes'}>
                 <div className="flex items-start space-x-3">
                   <div className="w-8 h-8 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
                     <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                     </svg>
                   </div>
                   <div>
-                    <h5 className="font-semibold text-black text-sm">Nova API de Pagamentos</h5>
-                    <p className="text-xs text-gray-600 mt-1">Integração mais rápida para sellers</p>
-                    <span className="text-xs text-red-600 font-medium">Ver mais →</span>
+                    <h5 className="font-semibold text-black text-sm">Cartão de Crédito</h5>
+                    <p className="text-xs text-gray-600 mt-1">Tenha seu próprio cartão usando saldo da conta</p>
+                    <span className="text-xs text-red-600 font-medium">Solicitar cartão →</span>
                   </div>
                 </div>
               </div>
               
-              <div className="p-4 hover:bg-gray-50 transition-colors cursor-pointer border-l-4 border-black">
+              <div className="p-4 hover:bg-gray-50 transition-colors cursor-pointer border-l-4 border-black" onClick={() => window.location.href = '/dashboard/escrow'}>
                 <div className="flex items-start space-x-3">
                   <div className="w-8 h-8 bg-gradient-to-br from-gray-800 to-black rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
                     <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
                   </div>
                   <div>
-                    <h5 className="font-semibold text-black text-sm">Taxas Especiais PIX</h5>
-                    <p className="text-xs text-gray-600 mt-1">Condições diferenciadas este mês</p>
-                    <span className="text-xs text-gray-800 font-medium">Ver detalhes →</span>
+                    <h5 className="font-semibold text-black text-sm">Conta Escrow</h5>
+                    <p className="text-xs text-gray-600 mt-1">Proteção total para suas transações</p>
+                    <span className="text-xs text-gray-800 font-medium">Configurar escrow →</span>
                   </div>
                 </div>
               </div>
