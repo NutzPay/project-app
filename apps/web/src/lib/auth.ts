@@ -78,7 +78,7 @@ export async function requireAuth(request: NextRequest): Promise<User> {
 // Helper para verificar se usuário é admin
 export async function getCurrentAdmin(request: NextRequest): Promise<User> {
   const user = await getCurrentUser(request);
-  
+
   if (!user) {
     throw new Error('Usuário não autenticado');
   }
@@ -86,6 +86,22 @@ export async function getCurrentAdmin(request: NextRequest): Promise<User> {
   if (user.role !== 'ADMIN') {
     throw new Error('Acesso negado - privilégios de administrador necessários');
   }
-  
+
   return user;
+}
+
+// New verifyAuth function that returns an object with success and user
+export async function verifyAuth(request: NextRequest): Promise<{success: boolean, user?: User, error?: string}> {
+  try {
+    const user = await getCurrentUser(request);
+
+    if (!user) {
+      return { success: false, error: 'Authentication required' };
+    }
+
+    return { success: true, user };
+  } catch (error) {
+    console.error('❌ Error verifying auth:', error);
+    return { success: false, error: 'Authentication failed' };
+  }
 }

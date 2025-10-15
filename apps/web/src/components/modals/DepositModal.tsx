@@ -71,6 +71,61 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
   const [isPaymentDetected, setIsPaymentDetected] = useState(false);
   const [paymentProcessingStep, setPaymentProcessingStep] = useState<'waiting' | 'detected' | 'processing' | 'confirmed'>('waiting');
   const [countdown, setCountdown] = useState<number>(5);
+  const [userFees, setUserFees] = useState<{
+    pixPayIn: { percentage: number; fixed: number };
+    pixPayOut: { percentage: number; fixed: number };
+    withdrawal: { percentage: number; fixed: number };
+    usdt: { percentage: number; fixed: number };
+  } | null>(null);
+  const [feesLoading, setFeesLoading] = useState(false);
+
+  // Helper function to format fee display
+  const formatPixFeeDisplay = () => {
+    console.log('🎨 MODAL: formatPixFeeDisplay called, userFees:', userFees);
+
+    if (!userFees) {
+      console.log('⚠️ MODAL: No userFees, returning default "1,0%"');
+      return '1,0%';
+    }
+
+    const { percentage, fixed } = userFees.pixPayIn;
+    console.log('🎨 MODAL: PIX fees - raw percentage:', percentage, 'fixed:', fixed);
+
+    // Convert decimal percentage to percentage display (0.03 -> 3.0%)
+    let feeText = `${(percentage * 100).toFixed(1)}%`;
+    console.log('🎨 MODAL: Percentage formatted:', feeText);
+
+    if (fixed > 0) {
+      feeText += ` + R$ ${fixed.toFixed(2)}`;
+      console.log('🎨 MODAL: Added fixed fee:', feeText);
+    }
+
+    console.log('🎨 MODAL: Final fee text:', feeText);
+    return feeText;
+  };
+
+  // Fetch user fees
+  const fetchUserFees = async () => {
+    try {
+      console.log('🔄 MODAL: Fetching user fees...');
+      setFeesLoading(true);
+      const response = await fetch('/api/user/fees');
+      const data = await response.json();
+
+      console.log('📊 MODAL: User fees response:', data);
+      if (data.success) {
+        setUserFees(data.fees);
+        console.log('✅ MODAL: User fees loaded successfully:', data.fees);
+        console.log('✅ MODAL: PIX fees - percentage:', data.fees.pixPayIn.percentage, 'fixed:', data.fees.pixPayIn.fixed);
+      } else {
+        console.error('❌ MODAL: Failed to load user fees:', data);
+      }
+    } catch (error) {
+      console.error('❌ MODAL: Error fetching user fees:', error);
+    } finally {
+      setFeesLoading(false);
+    }
+  };
 
   // Fetch user's assigned acquirers
   const fetchUserAcquirers = async () => {
@@ -180,11 +235,12 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
     }
   };
 
-  // Fetch acquirers when modal opens
+  // Fetch acquirers and fees when modal opens
   useEffect(() => {
     if (isOpen) {
-      console.log('🔄 Modal opened, fetching user acquirers...');
+      console.log('🔄 Modal opened, fetching user acquirers and fees...');
       fetchUserAcquirers();
+      fetchUserFees();
     }
   }, [isOpen]);
 
@@ -335,13 +391,13 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
       setStep('processing');
       
       try {
-        // Fazer chamada real para API Starkbank
-        const response = await fetch('/api/starkbank/pix/create', {
+        // Fazer chamada para API Bettrix
+        const response = await fetch('/api/bettrix/pix/create', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}` // Assumindo que o token está no localStorage
+            'Content-Type': 'application/json'
           },
+          credentials: 'include', // Include cookies in the request
           body: JSON.stringify({
             amount: parseFloat(form.amount),
             name: 'Usuário Seller', // Idealmente pegar do contexto do usuário
@@ -376,19 +432,18 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
       setStep('processing');
       
       try {
-        const response = await fetch('/api/xgate/usdt/create', {
+        const response = await fetch('/api/usdt/purchase', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            'Content-Type': 'application/json'
           },
+          credentials: 'include', // Include cookies in the request
           body: JSON.stringify({
-            amount: priceCalculation?.calculation?.finalPrice || parseFloat(form.amount), // Amount in BRL from calculation
+            brlAmount: priceCalculation?.calculation?.finalPrice || parseFloat(form.amount) * 5.5, // Amount in BRL from calculation
             usdtAmount: parseFloat(form.amount), // Amount of USDT requested
-            name: 'Usuário Seller',
-            taxId: '000.000.000-00',
-            description: `Compra de ${form.amount} USDT via PIX`,
-            externalId: `xgate_${Date.now()}`
+            exchangeRate: priceCalculation?.calculation?.exchangeRate || 5.5,
+            payerName: 'Usuário Seller',
+            payerDocument: '000.000.000-00'
           })
         });
 
@@ -396,17 +451,17 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
           throw new Error('Erro ao criar ordem USDT');
         }
 
-        const xgateResponse = await response.json();
-        
+        const bettrixResponse = await response.json();
+
         // Set transaction ID for WebSocket connection
-        setCurrentTransactionId(xgateResponse.transactionId);
-        
-        // Para USDT via Xgate, usamos os dados do PIX retornados
+        setCurrentTransactionId(bettrixResponse.transactionId);
+
+        // Para USDT via Bettrix, usamos os dados do PIX retornados
         setPixData({
-          qrCode: xgateResponse.qrCodeUrl,
-          qrCodeText: xgateResponse.qrCodeText,
-          expiresAt: xgateResponse.expiresAt ? new Date(xgateResponse.expiresAt) : new Date(Date.now() + 15 * 60 * 1000),
-          transactionId: xgateResponse.transactionId
+          qrCode: bettrixResponse.qrCodeUrl,
+          qrCodeText: bettrixResponse.qrCodeText,
+          expiresAt: bettrixResponse.expiresAt ? new Date(bettrixResponse.expiresAt) : new Date(Date.now() + 15 * 60 * 1000),
+          transactionId: bettrixResponse.transactionId
         });
 
         // Também salvamos dados específicos do USDT
@@ -414,10 +469,10 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
           walletAddress: 'Automático via PIX', // Não precisa de wallet manual
           network: 'USDT (TRC20)',
           minimumAmount: 10,
-          transactionId: xgateResponse.transactionId,
-          usdtAmount: xgateResponse.usdtAmount,
-          exchangeRate: xgateResponse.exchangeRate,
-          provider: 'xgate'
+          transactionId: bettrixResponse.transactionId,
+          usdtAmount: bettrixResponse.usdtAmount,
+          exchangeRate: bettrixResponse.exchangeRate,
+          provider: 'bettrix'
         });
         
         setStep('qrcode');
@@ -448,8 +503,10 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
               </svg>
             </div>
             <div>
-              <h3 className="text-xl font-bold text-gray-900">Comprar USDT via PIX</h3>
-              <p className="text-sm text-gray-600">Adicione saldo à sua conta</p>
+              <h3 className="text-xl font-bold text-gray-900">
+                {form.method === 'usdt' ? 'Comprar USDT via PIX' : 'Depósito via PIX'}
+              </h3>
+              <p className="text-sm text-gray-600">Adicionar saldo</p>
             </div>
           </div>
           <button
@@ -493,7 +550,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                   <div className="text-left">
                     <h5 className="font-semibold text-gray-900">PIX</h5>
                     <p className="text-sm text-gray-600">Depósito instantâneo via PIX</p>
-                    <p className="text-xs text-gray-700 font-medium">Sem taxas • Imediato</p>
+                    <p className="text-xs text-gray-700 font-medium">Taxa: {formatPixFeeDisplay()} • Imediato</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -611,7 +668,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                     <li>• Faça o pagamento via PIX</li>
                     <li>• Processamento instantâneo</li>
                     <li>• Saldo creditado automaticamente</li>
-                    <li>• Sem taxas adicionais</li>
+                    <li>• Taxa de {formatPixFeeDisplay()} sobre o valor</li>
                   </>
                 ) : (
                   <>
@@ -734,8 +791,8 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
 
             {form.method === 'usdt' && (
               <>
-                {/* Show PIX for Xgate USDT purchases or traditional transfer */}
-                {usdtData?.provider === 'xgate' && pixData ? (
+                {/* Show PIX for Bettrix USDT purchases or traditional transfer */}
+                {usdtData?.provider === 'bettrix' && pixData ? (
                   <>
                     <div className="text-center">
                       <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3">
