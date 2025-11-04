@@ -37,8 +37,8 @@ export default function OffersSection() {
       const defaultBanners: Offer[] = [
         {
           id: '1',
-          title: 'Nova API de Pagamentos',
-          subtitle: 'Conheça a integração mais rápida para sellers',
+          title: 'Cartão de Crédito',
+          subtitle: 'Tenha seu próprio cartão usando saldo da conta',
           ctaText: 'Acessar',
           imagePath: 'luxa.png',
           targetUrl: 'https://nutzpay.com/api',

@@ -1,0 +1,14 @@
+{
+  "id": "getting-started",
+  "title": "Início Rápido",
+  "description": "Bem-vindo ao NutzBeta! Este guia te ajudará a começar rapidamente com nossa API de pagamentos.",
+  "source": "@site/docs/getting-started.md",
+  "sourceDirName": ".",
+  "slug": "/getting-started",
+  "permalink": "/docs/docs/getting-started",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {}
+}

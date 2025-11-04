@@ -101,25 +101,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-8 pt-6 border-t border-gray-200">
-          <p className="text-sm text-gray-600 mb-4 text-center">Credenciais de teste:</p>
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={useTestCredentials}
-              className="w-full text-left px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <strong>Admin:</strong> admin@nutzbeta.com / admin123
-            </button>
-            <button
-              type="button"
-              onClick={useOwnerCredentials}
-              className="w-full text-left px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <strong>Owner:</strong> owner@exemplo.com / owner123
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

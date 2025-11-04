@@ -13,6 +13,7 @@ interface WithdrawalForm {
   method: WithdrawalMethod;
   amount: string;
   pixKey: string;
+  pixKeyType?: 0 | 1 | 2 | 3 | 4; // 0=CPF, 1=CNPJ, 2=EMAIL, 3=TELEFONE, 4=RANDOM_KEY
   walletAddress: string;
   network: 'TRC20' | 'ERC20';
 }
@@ -33,15 +34,22 @@ export default function WithdrawalModal({ isOpen, onClose }: WithdrawalModalProp
     usdt: 0
   });
   const [isLoadingBalances, setIsLoadingBalances] = useState(true);
-
-  const fees = {
-    pix: 0,
-    usdt: 2.50
-  };
+  const [fees, setFees] = useState<{
+    pix: { percentage: number; fixed: number };
+    usdt: { percentage: number; fixed: number };
+  }>({
+    pix: { percentage: 0, fixed: 0 },
+    usdt: { percentage: 0, fixed: 0 }
+  });
+  const [isLoadingFees, setIsLoadingFees] = useState(true);
+  const [transactionId, setTransactionId] = useState<string>('');
+  const [detectedPixKeyType, setDetectedPixKeyType] = useState<'cpf' | 'cnpj' | 'email' | 'phone' | 'random' | 'ambiguous' | null>(null);
+  const [showPixKeyTypeSelector, setShowPixKeyTypeSelector] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       fetchBalances();
+      fetchFees();
     }
   }, [isOpen]);
 
@@ -71,6 +79,116 @@ export default function WithdrawalModal({ isOpen, onClose }: WithdrawalModalProp
     }
   };
 
+  const fetchFees = async () => {
+    try {
+      setIsLoadingFees(true);
+
+      const response = await fetch('/api/user/fees');
+      const data = await response.json();
+
+      if (data.success) {
+        // Store the actual percentage and fixed fee for PIX payouts
+        setFees({
+          pix: {
+            percentage: data.fees.pixPayOut.percentage * 100, // Convert to percentage
+            fixed: data.fees.pixPayOut.fixed
+          },
+          usdt: {
+            percentage: data.fees.usdt.percentage * 100,
+            fixed: data.fees.usdt.fixed
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching fees:', error);
+      // Keep default values on error
+    } finally {
+      setIsLoadingFees(false);
+    }
+  };
+
+  const calculateTotalFee = (amount: number, percentage: number, fixed: number) => {
+    return (amount * (percentage / 100)) + fixed;
+  };
+
+  const detectPixKeyType = (key: string): { type: 'cpf' | 'cnpj' | 'email' | 'phone' | 'random' | 'ambiguous', pixKeyType: number } | null => {
+    if (!key || key.trim() === '') {
+      console.log('🔍 detectPixKeyType: empty key');
+      return null;
+    }
+
+    const cleanKey = key.replace(/\D/g, ''); // Remove non-numeric characters
+    console.log('🔍 detectPixKeyType:', { originalKey: key, cleanKey, length: cleanKey.length });
+
+    // Check for email
+    if (key.includes('@') && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) {
+      console.log('✅ Detected: EMAIL');
+      return { type: 'email', pixKeyType: 2 };
+    }
+
+    // Check for UUID (random key) - 32 alphanumeric chars or with hyphens
+    if (/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(key) ||
+        /^[a-f0-9]{32}$/i.test(key.replace(/-/g, ''))) {
+      console.log('✅ Detected: RANDOM KEY');
+      return { type: 'random', pixKeyType: 4 };
+    }
+
+    // Check for numeric keys (CPF, CNPJ, or phone)
+    if (cleanKey.length === 11) {
+      // Could be CPF or phone
+      console.log('⚠️ Detected: AMBIGUOUS (CPF or Phone)');
+      return { type: 'ambiguous', pixKeyType: -1 };
+    }
+
+    if (cleanKey.length === 14) {
+      // CNPJ
+      console.log('✅ Detected: CNPJ');
+      return { type: 'cnpj', pixKeyType: 1 };
+    }
+
+    if (cleanKey.length >= 10 && cleanKey.length <= 13) {
+      // Likely phone (10-13 digits with country code)
+      console.log('✅ Detected: PHONE');
+      return { type: 'phone', pixKeyType: 3 };
+    }
+
+    console.log('❌ No type detected');
+    return null;
+  };
+
+  const handlePixKeyChange = (value: string) => {
+    console.log('📝 handlePixKeyChange called with:', value);
+
+    setForm({ ...form, pixKey: value, pixKeyType: undefined });
+    setDetectedPixKeyType(null);
+    setShowPixKeyTypeSelector(false);
+
+    const detection = detectPixKeyType(value);
+    console.log('🎯 Detection result:', detection);
+
+    if (detection) {
+      if (detection.type === 'ambiguous') {
+        // Show selector for CPF or Phone
+        console.log('🔀 Setting ambiguous selector');
+        setDetectedPixKeyType('ambiguous');
+        setShowPixKeyTypeSelector(true);
+      } else {
+        console.log('✅ Setting detected type:', detection.type);
+        setDetectedPixKeyType(detection.type);
+        setForm(prev => ({ ...prev, pixKey: value, pixKeyType: detection.pixKeyType }));
+      }
+    } else {
+      console.log('❌ No detection result');
+    }
+  };
+
+  const handleAmbiguousTypeSelect = (type: 'cpf' | 'phone') => {
+    const pixKeyType = type === 'cpf' ? 0 : 3;
+    setForm({ ...form, pixKeyType });
+    setDetectedPixKeyType(type);
+    setShowPixKeyTypeSelector(false);
+  };
+
   if (!isOpen) return null;
 
   const handleMethodSelect = (method: WithdrawalMethod) => {
@@ -82,26 +200,40 @@ export default function WithdrawalModal({ isOpen, onClose }: WithdrawalModalProp
   const handleSubmit = () => {
     const requestedAmount = parseFloat(form.amount) || 0;
     const availableBalance = getBalance();
-    
+    const feeAmount = getFee();
+    const totalNeeded = getTotalNeeded();
+
     // Clear previous validation errors
     setValidationError('');
-    
+
     // Validate amount
     if (requestedAmount <= 0) {
       setValidationError('Por favor, insira um valor válido para o saque.');
       return;
     }
-    
-    // Validate balance
-    if (requestedAmount > availableBalance) {
+
+    // Validate balance (must have requested amount + fee)
+    if (totalNeeded > availableBalance) {
       const formattedBalance = formatCurrency(availableBalance, form.method === 'usdt' ? 'USDT' : 'BRL');
-      setValidationError(`Saldo insuficiente. Seu saldo disponível é de ${formattedBalance}.`);
+      const formattedTotal = formatCurrency(totalNeeded, form.method === 'usdt' ? 'USDT' : 'BRL');
+      const formattedFee = formatCurrency(feeAmount, form.method === 'usdt' ? 'USDT' : 'BRL');
+      setValidationError(`Saldo insuficiente. Você precisa de ${formattedTotal} (${formatCurrency(requestedAmount, form.method === 'usdt' ? 'USDT' : 'BRL')} + ${formattedFee} de taxa). Seu saldo disponível é de ${formattedBalance}.`);
       return;
     }
     
     // Validate specific fields
     if (form.method === 'pix' && !form.pixKey.trim()) {
       setValidationError('Por favor, insira sua chave PIX.');
+      return;
+    }
+
+    if (form.method === 'pix' && form.pixKeyType === undefined) {
+      setValidationError('Por favor, aguarde enquanto identificamos o tipo da sua chave PIX ou selecione o tipo manualmente.');
+      return;
+    }
+
+    if (form.method === 'pix' && showPixKeyTypeSelector) {
+      setValidationError('Por favor, selecione se sua chave é CPF ou Telefone.');
       return;
     }
     
@@ -114,13 +246,79 @@ export default function WithdrawalModal({ isOpen, onClose }: WithdrawalModalProp
     setStep('confirmation');
   };
 
-  const confirmWithdrawal = () => {
+  const confirmWithdrawal = async () => {
     setStep('processing');
-    
-    // Simular processamento
-    setTimeout(() => {
-      setStep('success');
-    }, 2000);
+    setValidationError('');
+
+    try {
+      const requestedAmount = parseFloat(form.amount);
+
+      if (form.method === 'pix') {
+        // Call Bettrix PIX payout API
+        const response = await fetch('/api/bettrix/pix/payout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            amount: requestedAmount,
+            pixKey: form.pixKey,
+            pixKeyType: form.pixKeyType, // 0=CPF, 1=CNPJ, 2=EMAIL, 3=TELEFONE, 4=RANDOM_KEY
+            recipientName: 'Usuario Nutz', // TODO: Get from user profile
+            recipientDocument: '', // Optional
+            recipientEmail: '', // Optional
+            recipientPhone: '' // Optional
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Erro ao processar saque PIX');
+        }
+
+        console.log('✅ PIX payout successful:', data);
+        setTransactionId(data.transaction?.id || 'N/A');
+
+        // Refresh balances after successful payout
+        await fetchBalances();
+
+        setStep('success');
+
+      } else if (form.method === 'usdt') {
+        // Call USDT payout API
+        const response = await fetch('/api/usdt/payout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            amount: requestedAmount,
+            walletAddress: form.walletAddress,
+            network: form.network
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Erro ao processar saque USDT');
+        }
+
+        console.log('✅ USDT payout successful:', data);
+        setTransactionId(data.transaction?.id || 'N/A');
+
+        // Refresh balances after successful payout
+        await fetchBalances();
+
+        setStep('success');
+      }
+
+    } catch (error) {
+      console.error('❌ Withdrawal error:', error);
+      setValidationError(error instanceof Error ? error.message : 'Erro ao processar saque');
+      setStep('form');
+    }
   };
 
   const resetModal = () => {
@@ -151,13 +349,31 @@ export default function WithdrawalModal({ isOpen, onClose }: WithdrawalModalProp
   };
 
   const getFee = () => {
-    return fees[form.method];
+    const amount = parseFloat(form.amount) || 0;
+    if (amount === 0) return 0;
+
+    if (form.method === 'pix') {
+      // PIX withdrawal fee from API
+      return calculateTotalFee(amount, fees.pix.percentage, fees.pix.fixed);
+    } else if (form.method === 'usdt') {
+      // USDT withdrawal fee from API
+      return calculateTotalFee(amount, fees.usdt.percentage, fees.usdt.fixed);
+    }
+
+    return 0;
   };
 
-  const getNetAmount = () => {
+  // Total amount needed from balance (requested amount + fee)
+  const getTotalNeeded = () => {
     const amount = parseFloat(form.amount) || 0;
     const fee = getFee();
-    return amount - fee;
+    return amount + fee;
+  };
+
+  // Amount that will be received by the user (same as requested for PIX)
+  const getNetAmount = () => {
+    const amount = parseFloat(form.amount) || 0;
+    return amount; // User receives exactly what they requested
   };
 
   return (
@@ -209,7 +425,7 @@ export default function WithdrawalModal({ isOpen, onClose }: WithdrawalModalProp
                   <div className="text-left">
                     <h5 className="font-semibold text-gray-900">PIX</h5>
                     <p className="text-sm text-gray-600">Saque instantâneo para sua conta</p>
-                    <p className="text-xs text-gray-500">Taxa: Gratuito</p>
+                    <p className="text-xs text-gray-500">Taxa: 2,0%</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -236,7 +452,7 @@ export default function WithdrawalModal({ isOpen, onClose }: WithdrawalModalProp
                   <div className="text-left">
                     <h5 className="font-semibold text-gray-900">USDT</h5>
                     <p className="text-sm text-gray-600">Stablecoin para sua wallet</p>
-                    <p className="text-xs text-gray-500">Taxa: $2.50</p>
+                    <p className="text-xs text-gray-500">Taxa: 1,5%</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -317,10 +533,51 @@ export default function WithdrawalModal({ isOpen, onClose }: WithdrawalModalProp
                 <input
                   type="text"
                   value={form.pixKey}
-                  onChange={(e) => setForm({ ...form, pixKey: e.target.value })}
+                  onChange={(e) => handlePixKeyChange(e.target.value)}
                   placeholder="Digite sua chave PIX (CPF, email, telefone ou chave aleatória)"
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
                 />
+
+                {/* Detected PIX Key Type */}
+                {detectedPixKeyType && detectedPixKeyType !== 'ambiguous' && (
+                  <div className="mt-2 flex items-center space-x-2 text-sm">
+                    <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-green-600 font-medium">
+                      {detectedPixKeyType === 'cpf' && 'Tipo detectado: CPF'}
+                      {detectedPixKeyType === 'cnpj' && 'Tipo detectado: CNPJ'}
+                      {detectedPixKeyType === 'email' && 'Tipo detectado: Email'}
+                      {detectedPixKeyType === 'phone' && 'Tipo detectado: Telefone'}
+                      {detectedPixKeyType === 'random' && 'Tipo detectado: Chave Aleatória'}
+                    </span>
+                  </div>
+                )}
+
+                {/* Ambiguous Type Selector (CPF or Phone) */}
+                {showPixKeyTypeSelector && detectedPixKeyType === 'ambiguous' && (
+                  <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800 mb-2 font-medium">
+                      Esta chave pode ser CPF ou Telefone. Por favor, selecione o tipo correto:
+                    </p>
+                    <div className="flex space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => handleAmbiguousTypeSelect('cpf')}
+                        className="flex-1 px-4 py-2 bg-white border border-yellow-300 text-yellow-900 rounded-lg hover:bg-yellow-100 font-medium transition-colors"
+                      >
+                        CPF
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAmbiguousTypeSelect('phone')}
+                        className="flex-1 px-4 py-2 bg-white border border-yellow-300 text-yellow-900 rounded-lg hover:bg-yellow-100 font-medium transition-colors"
+                      >
+                        Telefone
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -424,10 +681,22 @@ export default function WithdrawalModal({ isOpen, onClose }: WithdrawalModalProp
                 <span>{formatCurrency(getFee(), form.method === 'usdt' ? 'USDT' : 'BRL')}</span>
               </div>
               {form.method === 'pix' && (
-                <div className="flex justify-between">
-                  <span className="font-medium">Chave PIX:</span>
-                  <span className="text-sm font-mono">{form.pixKey}</span>
-                </div>
+                <>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Chave PIX:</span>
+                    <span className="text-sm font-mono">{form.pixKey}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Tipo de Chave:</span>
+                    <span className="text-sm">
+                      {form.pixKeyType === 0 && 'CPF'}
+                      {form.pixKeyType === 1 && 'CNPJ'}
+                      {form.pixKeyType === 2 && 'Email'}
+                      {form.pixKeyType === 3 && 'Telefone'}
+                      {form.pixKeyType === 4 && 'Chave Aleatória'}
+                    </span>
+                  </div>
+                </>
               )}
               {form.method === 'usdt' && (
                 <>
@@ -477,7 +746,8 @@ export default function WithdrawalModal({ isOpen, onClose }: WithdrawalModalProp
             </div>
             <div>
               <h4 className="text-xl font-bold text-gray-900 mb-2">Processando Saque</h4>
-              <p className="text-gray-600">Estamos processando sua solicitação...</p>
+              <p className="text-gray-600">Estamos processando sua solicitação via Bettrix...</p>
+              <p className="text-xs text-gray-500 mt-2">Aguarde alguns instantes</p>
             </div>
           </div>
         )}
@@ -500,7 +770,7 @@ export default function WithdrawalModal({ isOpen, onClose }: WithdrawalModalProp
               </p>
               <div className="bg-gray-50 p-4 rounded-lg">
                 <p className="text-sm font-medium text-gray-900">ID da transação</p>
-                <p className="text-lg font-mono text-gray-700">#TXN{Date.now().toString().slice(-8)}</p>
+                <p className="text-lg font-mono text-gray-700">{transactionId || `#TXN${Date.now().toString().slice(-8)}`}</p>
               </div>
             </div>
             <button

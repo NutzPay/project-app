@@ -1,48 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { UserRole, UserType } from '@/types/rbac';
-
-// Mock user data - em produção viria do banco de dados
-const MOCK_ADMIN_USER = {
-  id: 'admin-1',
-  email: 'admin@nutz.com',
-  name: 'Admin User',
-  role: UserRole.SUPER_ADMIN,
-  userType: UserType.ADMIN_INTERNAL,
-  isAdmin: true,
-  isSeller: false,
-  status: 'ACTIVE',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
+import { getCurrentBackofficeUser } from '@/lib/backoffice/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    // Verificar token de autenticação do backoffice
-    const token = request.cookies.get('backoffice-auth-token')?.value;
-    
-    if (!token) {
+    // Verificar token de autenticação do backoffice usando JWT
+    const backofficeUser = await getCurrentBackofficeUser(request);
+
+    if (!backofficeUser) {
+      console.log('❌ /api/backoffice/auth/me: No authenticated user');
       return NextResponse.json(
         { error: 'Authentication required', code: 'NO_TOKEN' },
         { status: 401 }
       );
     }
 
-    // Em produção, verificar o token JWT e buscar o usuário do banco
-    // const { verifyBackofficeToken } = await import('@/lib/backoffice/auth');
-    // const user = await verifyBackofficeToken(token);
+    console.log('✅ /api/backoffice/auth/me: User authenticated:', backofficeUser.email);
 
-    // Para desenvolvimento, retornar mock user
-    const user = MOCK_ADMIN_USER;
+    // Verificar se é admin (SUPER_ADMIN, ADMIN ou OWNER)
+    const isAdmin = ['SUPER_ADMIN', 'ADMIN', 'OWNER'].includes(backofficeUser.role);
 
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Invalid token', code: 'INVALID_TOKEN' },
-        { status: 401 }
-      );
-    }
-
-    // Verificar se é admin
-    if (!user.isAdmin || user.isSeller) {
+    if (!isAdmin) {
+      console.log('❌ /api/backoffice/auth/me: User is not admin:', backofficeUser.role);
       return NextResponse.json(
         { error: 'Access denied', code: 'NOT_ADMIN' },
         { status: 403 }
@@ -50,17 +29,17 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      userType: user.userType,
-      isAdmin: user.isAdmin,
-      isSeller: user.isSeller,
-      status: user.status,
+      id: backofficeUser.id,
+      email: backofficeUser.email,
+      name: backofficeUser.name,
+      role: backofficeUser.role,
+      userType: UserType.ADMIN_INTERNAL,
+      isAdmin: true,
+      isSeller: false,
+      status: 'ACTIVE',
     });
   } catch (error) {
-    console.error('Auth me error:', error);
+    console.error('❌ Auth me error:', error);
     return NextResponse.json(
       { error: 'Internal server error', code: 'SERVER_ERROR' },
       { status: 500 }

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { UserRole } from '@/types/rbac';
+import { prisma } from '@/lib/prisma';
+import { generateBackofficeToken } from '@/lib/backoffice/auth';
+import crypto from 'crypto';
 
 // Simple UUID generator for server-side use
 function generateUUID() {
@@ -14,6 +17,11 @@ function generateUUID() {
 function logAuditEvent(event: any) {
   const timestamp = new Date().toISOString();
   console.log(`[AUDIT] ${timestamp}:`, JSON.stringify(event, null, 2));
+}
+
+// Hash password for comparison
+function hashPassword(password: string): string {
+  return crypto.createHash('sha256').update(password).digest('hex');
 }
 
 interface LoginRequest {
@@ -32,34 +40,6 @@ interface LoginResponse {
   };
   message: string;
 }
-
-// Mock admin users para desenvolvimento
-const mockAdminUsers = [
-  {
-    id: 'admin-1',
-    email: 'admin@nutz.com',
-    password: 'admin123', // Em produção seria hash
-    name: 'Super Admin',
-    role: UserRole.SUPER_ADMIN,
-    isAdmin: true,
-  },
-  {
-    id: 'admin-2',
-    email: 'ops@nutz.com',
-    password: 'ops123',
-    name: 'Operations Admin',
-    role: UserRole.OPERATIONS,
-    isAdmin: true,
-  },
-  {
-    id: 'admin-3',
-    email: 'support@nutz.com',
-    password: 'support123',
-    name: 'Support User',
-    role: UserRole.SUPPORT,
-    isAdmin: true,
-  },
-];
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -89,10 +69,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Buscar usuário admin
-    const adminUser = mockAdminUsers.find(
-      (user) => user.email.toLowerCase() === email.toLowerCase()
-    );
+    // Buscar usuário no banco de dados
+    const adminUser = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() }
+    });
 
     if (!adminUser) {
       logAuditEvent({
@@ -108,15 +88,37 @@ export async function POST(request: NextRequest) {
 
       // Delay para prevenir timing attacks
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       return NextResponse.json(
         { error: 'Credenciais inválidas', code: 'INVALID_CREDENTIALS' },
         { status: 401 }
       );
     }
 
-    // Verificar senha (em produção seria bcrypt.compare)
-    if (adminUser.password !== password) {
+    // Verificar se usuário está ativo
+    if (adminUser.status !== 'ACTIVE') {
+      logAuditEvent({
+        eventType: 'LOGIN_ATTEMPT',
+        userId: adminUser.id,
+        action: 'BACKOFFICE_LOGIN',
+        email,
+        reason: 'User account not active',
+        success: false,
+        ipAddress: ip,
+        userAgent,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      return NextResponse.json(
+        { error: 'Conta inativa', code: 'ACCOUNT_INACTIVE' },
+        { status: 401 }
+      );
+    }
+
+    // Verificar senha (hash SHA256)
+    const hashedPassword = hashPassword(password);
+    if (adminUser.password !== hashedPassword) {
       logAuditEvent({
         eventType: 'LOGIN_ATTEMPT',
         userId: adminUser.id,
@@ -130,16 +132,29 @@ export async function POST(request: NextRequest) {
 
       // Delay para prevenir timing attacks
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       return NextResponse.json(
         { error: 'Credenciais inválidas', code: 'INVALID_CREDENTIALS' },
         { status: 401 }
       );
     }
 
-    // Login bem-sucedido - criar sessão
-    const sessionToken = `admin-session-${adminUser.id}-${Date.now()}`;
-    
+    // Gerar token JWT
+    const sessionToken = generateBackofficeToken({
+      id: adminUser.id,
+      email: adminUser.email,
+      role: adminUser.role
+    });
+
+    // Atualizar último login
+    await prisma.user.update({
+      where: { id: adminUser.id },
+      data: {
+        lastLoginAt: new Date(),
+        lastLoginIp: ip
+      }
+    });
+
     // Log de auditoria para login bem-sucedido
     logAuditEvent({
       eventType: 'LOGIN_ATTEMPT',
@@ -149,7 +164,7 @@ export async function POST(request: NextRequest) {
       name: adminUser.name,
       role: adminUser.role,
       success: true,
-      sessionToken,
+      sessionToken: 'JWT_TOKEN_GENERATED',
       ipAddress: ip,
       userAgent,
     });
@@ -163,29 +178,29 @@ export async function POST(request: NextRequest) {
         id: adminUser.id,
         email: adminUser.email,
         name: adminUser.name,
-        role: adminUser.role,
-        isAdmin: adminUser.isAdmin,
+        role: adminUser.role as UserRole,
+        isAdmin: ['SUPER_ADMIN', 'ADMIN', 'OWNER'].includes(adminUser.role),
       },
       message: 'Login realizado com sucesso',
     };
 
     // Criar resposta com cookie de sessão
     const nextResponse = NextResponse.json(response);
-    
+
     // Definir cookie seguro para sessão
     nextResponse.cookies.set('backoffice-auth-token', sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax', // Mudando de 'strict' para 'lax' para permitir redirects
+      secure: true, // HTTPS habilitado
+      sameSite: 'lax',
       maxAge: 60 * 60 * 8, // 8 horas
-      path: '/', // Mudando para root path para garantir que seja acessível
+      path: '/',
     });
 
     return nextResponse;
   } catch (error) {
     const responseTime = Date.now() - startTime;
     console.error(`[BACKOFFICE-LOGIN] Error after ${responseTime}ms:`, error);
-    
+
     logAuditEvent({
       eventType: 'LOGIN_ATTEMPT',
       userId: 'unknown',
@@ -196,7 +211,7 @@ export async function POST(request: NextRequest) {
       ipAddress: ip,
       userAgent,
     });
-    
+
     return NextResponse.json(
       { error: 'Erro interno do servidor', code: 'SERVER_ERROR' },
       { status: 500 }

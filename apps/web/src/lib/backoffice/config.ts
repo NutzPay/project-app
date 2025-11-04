@@ -17,7 +17,8 @@ export const BACKOFFICE_WHITELIST: string[] = [
   // Adicionar emails autorizados aqui
   'admin@nutzbeta.com',
   'felix@nutzbeta.com',
-  'developer@nutzbeta.com'
+  'developer@nutzbeta.com',
+  'admin@nutzpay.com', // Admin principal de produção
 ];
 
 // Configurações de sessão isoladas

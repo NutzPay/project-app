@@ -79,15 +79,16 @@ export default function MoneyActions() {
         usdtAmount: priceCalculation.calculation.usdtAmount
       });
 
-      const response = await fetch('/api/xgate/usdt/create', {
+      const response = await fetch('/api/usdt/purchase', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Include cookies in the request
         body: JSON.stringify({
-          amount: priceCalculation.calculation.finalPrice,
+          brlAmount: priceCalculation.calculation.finalPrice,
           usdtAmount: priceCalculation.calculation.usdtAmount,
-          name: 'User Name', // TODO: Pegar do perfil do usuário
-          taxId: '12345678901', // TODO: Pegar do perfil do usuário
-          description: `Compra de ${priceCalculation.formatted.usdtAmount}`
+          exchangeRate: priceCalculation.calculation.pricePerUsdt,
+          payerName: 'Usuário Seller', // TODO: Pegar do perfil do usuário
+          payerDocument: '000.000.000-00' // TODO: Pegar do perfil do usuário
         })
       });
 

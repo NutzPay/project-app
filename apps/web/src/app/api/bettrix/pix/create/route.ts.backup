@@ -1,0 +1,152 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUser } from '@/lib/auth';
+import { bettrixService } from '@/lib/bettrix';
+import { prisma } from '@/lib/prisma';
+
+export async function POST(request: NextRequest) {
+  try {
+    console.log('🔄 Bettrix PIX create endpoint called');
+    console.log('🍪 All cookies:', request.cookies.toString());
+    console.log('🔑 Auth token cookie:', request.cookies.get('auth-token'));
+    console.log('📋 Request headers:', Object.fromEntries(request.headers));
+
+    const currentUser = await getCurrentUser(request);
+    console.log('👤 Current user result:', currentUser);
+
+    if (!currentUser) {
+      console.log('❌ User not authenticated');
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Usuário não autenticado',
+          code: 'UNAUTHORIZED'
+        },
+        { status: 401 }
+      );
+    }
+
+    const { amount, name, taxId, description, externalId } = await request.json();
+
+    // Validate input
+    if (!amount || !name || !taxId || !description) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Campos obrigatórios: amount, name, taxId, description'
+        },
+        { status: 400 }
+      );
+    }
+
+    if (amount < 1) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Valor mínimo é R$ 1,00'
+        },
+        { status: 400 }
+      );
+    }
+
+    // Get user details
+    const user = await prisma.user.findUnique({
+      where: { id: currentUser.id },
+      select: {
+        email: true,
+        document: true,
+      }
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Usuário não encontrado'
+        },
+        { status: 404 }
+      );
+    }
+
+    console.log('🔄 Creating PIX via Bettrix integration...');
+    console.log('📋 Data:', { amount, name, taxId, description, externalId });
+
+    // Generate unique order ID
+    const orderId = externalId || `nutz_deposit_${Date.now()}_${currentUser.id}`;
+
+    // Create PIX via Bettrix
+    const bettrixResponse = await bettrixService.createCashIn({
+      amount: amount,
+      payerName: name,
+      payerDocument: taxId.replace(/\D/g, ''),
+      payerEmail: user.email || `user${currentUser.id}@nutz.com`,
+      payerPhone: '11999999999', // Default phone since user model doesn't have phone field
+      description: description,
+      orderId: orderId,
+      postbackUrl: `${process.env.NEXTAUTH_URL}/api/bettrix/webhook`
+    });
+
+    // Get or create PIX wallet
+    let pixWallet = await prisma.pIXWallet.findUnique({
+      where: { userId: currentUser.id }
+    });
+
+    if (!pixWallet) {
+      pixWallet = await prisma.pIXWallet.create({
+        data: {
+          userId: currentUser.id
+        }
+      });
+    }
+
+    // Create transaction record
+    const transaction = await prisma.pIXTransaction.create({
+      data: {
+        walletId: pixWallet.id,
+        type: 'DEPOSIT',
+        status: 'PENDING',
+        amount: amount,
+        balanceAfter: pixWallet.balance, // Will be updated when payment is confirmed
+        pixKey: 'N/A', // Will be updated from webhook
+        description: description,
+        externalId: orderId,
+        endToEndId: bettrixResponse.externalId,
+        metadata: JSON.stringify({
+          bettrixTransactionId: bettrixResponse.transactionId,
+          bettrixExternalId: bettrixResponse.externalId,
+          payerName: name,
+          payerDocument: taxId,
+          provider: 'bettrix'
+        })
+      }
+    });
+
+    const pixResponse = {
+      id: bettrixResponse.transactionId.toString(),
+      qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(bettrixResponse.qrCode)}`,
+      qrCodeText: bettrixResponse.qrCode,
+      qrCodeBase64: bettrixResponse.qrCodeBase64,
+      amount: amount,
+      status: 'created',
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+      transactionId: transaction.id,
+      orderId: orderId,
+      createdAt: new Date(),
+    };
+
+    console.log('✅ PIX created successfully via Bettrix:', bettrixResponse.transactionId);
+    return NextResponse.json({
+      success: true,
+      ...pixResponse
+    });
+
+  } catch (error) {
+    console.error('❌ Error creating PIX:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erro interno ao gerar PIX'
+      },
+      { status: 500 }
+    );
+  }
+}

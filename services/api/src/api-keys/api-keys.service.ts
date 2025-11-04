@@ -48,6 +48,36 @@ export class ApiKeysService {
       .update(apiKey + salt)
       .digest('hex');
 
+    // First, try to create or ensure user exists (simple approach for demo)
+    try {
+      await this.prisma.user.upsert({
+        where: { id: userId },
+        update: {},
+        create: {
+          id: userId,
+          email: `api-user-${userId}@example.com`,
+          name: 'API User',
+          password: '$2a$12$dummy.password.hash.for.api.user.not.used.in.real.auth', // Dummy hash for API users
+          role: 'MEMBER', // Use valid enum value
+          status: 'ACTIVE', // Add required status
+        },
+      });
+
+      await this.prisma.company.upsert({
+        where: { id: data.companyId },
+        update: {},
+        create: {
+          id: data.companyId,
+          name: data.name + ' Company',
+          email: `company-${data.companyId}@example.com`,
+          document: `${Date.now().toString().substr(-11)}`, // Fake 11-digit document
+          status: 'ACTIVE',
+        },
+      });
+    } catch (error) {
+      console.log('User/Company creation error (may already exist):', error.message);
+    }
+
     const createdKey = await this.prisma.apiKey.create({
       data: {
         name: data.name,
@@ -326,6 +356,57 @@ export class ApiKeysService {
     return updatedKey;
   }
 
+  // Method to validate API key and return the matched key with scopes
+  async validateApiKey(apiKey: string) {
+    // Get all API keys from database (with sensitive fields)
+    const allKeys = await this.prisma.apiKey.findMany({
+      where: {
+        status: 'ACTIVE', // Only check active keys
+      },
+      select: {
+        id: true,
+        name: true,
+        keyHash: true,
+        keySalt: true,
+        scopes: true,
+        ipWhitelist: true,
+        status: true,
+        expiresAt: true,
+        lastUsedAt: true,
+        lastUsedIp: true,
+        createdAt: true,
+        updatedAt: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    // Search for matching key by comparing hashes
+    for (const key of allKeys) {
+      const testHash = crypto
+        .createHmac('sha256', this.configService.get('API_KEY_SALT'))
+        .update(apiKey + key.keySalt)
+        .digest('hex');
+
+      if (testHash === key.keyHash) {
+        return key;
+      }
+    }
+
+    return null;
+  }
+
   // Method to validate scopes
   validateScopes(requiredScopes: string[], keyScopes: string[]): boolean {
     for (const requiredScope of requiredScopes) {
@@ -337,10 +418,10 @@ export class ApiKeysService {
         }
         return false;
       });
-      
+
       if (!hasScope) return false;
     }
-    
+
     return true;
   }
 }

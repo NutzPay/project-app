@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/BaseLayout';
 import WithdrawalModal from '@/components/modals/WithdrawalModal';
 import { useTransactions } from '@/hooks/useTransactions';
@@ -128,6 +128,8 @@ export default function TransactionsPage() {
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [filters, setFilters] = useState({
     status: '',
     type: '',
@@ -138,27 +140,106 @@ export default function TransactionsPage() {
     amountTo: ''
   });
 
+  // Memoize filter object to prevent infinite re-renders
+  const apiFilters = useMemo(() => {
+    const result: any = {
+      page: currentPage,
+      limit: pageSize,
+    };
+
+    if (filters.status) {
+      result.status = filters.status.toUpperCase();
+    }
+    if (filters.method === 'USDT') {
+      result.type = 'USDT';
+    }
+    if (filters.method === 'PIX') {
+      result.type = 'PIX';
+    }
+
+    return result;
+  }, [filters.status, filters.method, currentPage, pageSize]);
+
   // Use the dynamic transactions hook
-  const { transactions: apiTransactions, loading, error, stats: apiStats, pagination, refetch } = useTransactions({
-    page: 1,
-    limit: 20,
-    ...(filters.status && { status: filters.status.toUpperCase() }),
-    ...(filters.method === 'USDT' && { type: 'USDT' }),
-    ...(filters.method === 'PIX' && { type: 'PIX' }),
-  });
+  const { transactions: apiTransactions, loading, error, stats: apiStats, pagination, refetch } = useTransactions(apiFilters);
 
-  // Use dynamic data if available, fallback to mock data
-  const transactions = (!loading && apiTransactions && apiTransactions.length > 0) ? apiTransactions : mockTransactions;
+  // Determine which data source to use
+  const shouldUseMockData = !loading && (!apiTransactions || apiTransactions.length === 0) && error;
+  const transactions = shouldUseMockData ? mockTransactions : (apiTransactions || []);
 
-  // Use API stats if available, otherwise fallback to calculated stats from current data
-  const stats = apiStats || {
-    totalTransactions: pagination.total || (loading ? 0 : transactions.length),
-    totalVolume: loading ? 0 : transactions.reduce((sum, t) => sum + (t.amount || 0), 0),
-    completedToday: loading ? 0 : transactions.filter(t => t.status === 'completed' || t.status === 'COMPLETED').length,
-    pendingTransactions: loading ? 0 : transactions.filter(t => t.status === 'pending' || t.status === 'PENDING').length,
-    averageValue: loading ? 0 : (transactions.length > 0 ? transactions.reduce((sum, t) => sum + (t.amount || 0), 0) / transactions.length : 0),
-    totalFees: loading ? 0 : transactions.reduce((sum, t) => sum + (t.fee || 0), 0)
+  // Calculate stats based on the data source being used
+  const stats = useMemo(() => {
+    if (apiStats && !shouldUseMockData) {
+      return apiStats;
+    }
+
+    // Calculate stats from current transactions
+    const currentTransactions = transactions || [];
+    return {
+      totalTransactions: pagination.total || currentTransactions.length,
+      totalVolume: currentTransactions.reduce((sum, t) => sum + (t.amount || 0), 0),
+      completedToday: currentTransactions.filter(t =>
+        (t.status === 'completed' || t.status === 'COMPLETED') &&
+        new Date(t.date).toDateString() === new Date().toDateString()
+      ).length,
+      pendingTransactions: currentTransactions.filter(t =>
+        t.status === 'pending' || t.status === 'PENDING'
+      ).length,
+      averageValue: currentTransactions.length > 0
+        ? currentTransactions.reduce((sum, t) => sum + (t.amount || 0), 0) / currentTransactions.length
+        : 0,
+      totalFees: currentTransactions.reduce((sum, t) => sum + (t.fee || 0), 0)
+    };
+  }, [apiStats, shouldUseMockData, transactions, pagination.total]);
+
+  // Pagination handlers
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
   };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < pagination.totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.status, filters.method]);
+
+  // Calculate pagination info
+  const paginationInfo = useMemo(() => {
+    let total, totalPages;
+
+    if (shouldUseMockData) {
+      // For mock data, we simulate pagination
+      total = mockTransactions.length;
+      totalPages = Math.max(1, Math.ceil(total / pageSize));
+    } else {
+      // For real data, use API pagination
+      total = pagination.total || 0;
+      totalPages = pagination.totalPages || 1;
+    }
+
+    const start = total > 0 ? ((currentPage - 1) * pageSize) + 1 : 0;
+    const end = Math.min(currentPage * pageSize, total);
+
+    return {
+      start,
+      end,
+      total,
+      totalPages,
+      hasPrevPage: currentPage > 1,
+      hasNextPage: currentPage < totalPages
+    };
+  }, [pagination.total, pagination.totalPages, transactions.length, currentPage, pageSize, shouldUseMockData]);
 
   const formatCurrency = (value: number, currency: string = 'BRL') => {
     let validCurrency = 'BRL';
@@ -200,8 +281,25 @@ export default function TransactionsPage() {
       onWithdrawClick={() => setShowWithdrawalModal(true)}
     >
       <div className="space-y-6">
-        {/* Error Alert */}
-        {error && (
+        {/* Error/Demo Data Alert */}
+        {(error && shouldUseMockData) && (
+          <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-lg">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-blue-700">
+                  <strong>Modo Demonstração:</strong> Exibindo transações de exemplo. As transações reais aparecerão aqui quando disponíveis.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {(error && !shouldUseMockData) && (
           <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
             <div className="flex">
               <div className="flex-shrink-0">
@@ -600,16 +698,38 @@ export default function TransactionsPage() {
           <div className="bg-white px-4 sm:px-6 py-4 border-t border-gray-200">
             {/* Mobile Pagination */}
             <div className="flex items-center justify-between sm:hidden">
-              <button className="flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+              <button
+                onClick={handlePrevPage}
+                disabled={!paginationInfo.hasPrevPage}
+                className={`flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-lg transition-colors ${
+                  paginationInfo.hasPrevPage
+                    ? 'text-gray-700 bg-white hover:bg-gray-50'
+                    : 'text-gray-400 bg-gray-50 cursor-not-allowed'
+                }`}
+              >
                 <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
                 Anterior
               </button>
               <div className="text-sm text-gray-700">
-                <span className="font-medium">1</span>-<span className="font-medium">5</span> de <span className="font-medium">1247</span>
+                {paginationInfo.total > 0 ? (
+                  <>
+                    <span className="font-medium">{paginationInfo.start}</span>-<span className="font-medium">{paginationInfo.end}</span> de <span className="font-medium">{paginationInfo.total}</span>
+                  </>
+                ) : (
+                  <span className="font-medium">Nenhum resultado</span>
+                )}
               </div>
-              <button className="flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+              <button
+                onClick={handleNextPage}
+                disabled={!paginationInfo.hasNextPage}
+                className={`flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-lg transition-colors ${
+                  paginationInfo.hasNextPage
+                    ? 'text-gray-700 bg-white hover:bg-gray-50'
+                    : 'text-gray-400 bg-gray-50 cursor-not-allowed'
+                }`}
+              >
                 Próximo
                 <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -621,27 +741,120 @@ export default function TransactionsPage() {
             <div className="hidden sm:flex sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm text-gray-700">
-                  Mostrando <span className="font-medium">1</span> a <span className="font-medium">5</span> de{' '}
-                  <span className="font-medium">1247</span> resultados
+                  Mostrando <span className="font-medium">{paginationInfo.start}</span> a <span className="font-medium">{paginationInfo.end}</span> de{' '}
+                  <span className="font-medium">{paginationInfo.total}</span> resultados
                 </p>
               </div>
               <div>
                 <nav className="relative z-0 inline-flex rounded-lg shadow-sm -space-x-px" aria-label="Pagination">
-                  <button className="relative inline-flex items-center px-3 py-2 rounded-l-lg border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors">
+                  {/* Previous Button */}
+                  <button
+                    onClick={handlePrevPage}
+                    disabled={!paginationInfo.hasPrevPage}
+                    className={`relative inline-flex items-center px-3 py-2 rounded-l-lg border border-gray-300 text-sm font-medium transition-colors ${
+                      paginationInfo.hasPrevPage
+                        ? 'bg-white text-gray-500 hover:bg-gray-50'
+                        : 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                    }`}
+                  >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                     </svg>
                   </button>
-                  <button className="bg-gray-900 border-gray-900 text-white relative inline-flex items-center px-4 py-2 border text-sm font-medium hover:bg-gray-800 transition-colors">
-                    1
-                  </button>
-                  <button className="bg-white border-gray-300 text-gray-500 hover:bg-gray-50 relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors">
-                    2
-                  </button>
-                  <button className="bg-white border-gray-300 text-gray-500 hover:bg-gray-50 relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors">
-                    3
-                  </button>
-                  <button className="relative inline-flex items-center px-3 py-2 rounded-r-lg border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors">
+
+                  {/* Page Numbers */}
+                  {(() => {
+                    const pages = [];
+                    const totalPages = paginationInfo.totalPages;
+                    const current = currentPage;
+
+                    // Always show first page
+                    if (totalPages > 0) {
+                      pages.push(
+                        <button
+                          key={1}
+                          onClick={() => handlePageChange(1)}
+                          className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors ${
+                            current === 1
+                              ? 'bg-gray-900 border-gray-900 text-white hover:bg-gray-800'
+                              : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                          }`}
+                        >
+                          1
+                        </button>
+                      );
+                    }
+
+                    // Show ellipsis if needed
+                    if (current > 3) {
+                      pages.push(
+                        <span key="ellipsis-start" className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500">
+                          ...
+                        </span>
+                      );
+                    }
+
+                    // Show pages around current page
+                    const startPage = Math.max(2, current - 1);
+                    const endPage = Math.min(totalPages - 1, current + 1);
+
+                    for (let i = startPage; i <= endPage; i++) {
+                      if (i !== 1 && i !== totalPages) {
+                        pages.push(
+                          <button
+                            key={i}
+                            onClick={() => handlePageChange(i)}
+                            className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors ${
+                              current === i
+                                ? 'bg-gray-900 border-gray-900 text-white hover:bg-gray-800'
+                                : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                            }`}
+                          >
+                            {i}
+                          </button>
+                        );
+                      }
+                    }
+
+                    // Show ellipsis if needed
+                    if (current < totalPages - 2) {
+                      pages.push(
+                        <span key="ellipsis-end" className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500">
+                          ...
+                        </span>
+                      );
+                    }
+
+                    // Always show last page if more than 1 page
+                    if (totalPages > 1) {
+                      pages.push(
+                        <button
+                          key={totalPages}
+                          onClick={() => handlePageChange(totalPages)}
+                          className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors ${
+                            current === totalPages
+                              ? 'bg-gray-900 border-gray-900 text-white hover:bg-gray-800'
+                              : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                          }`}
+                        >
+                          {totalPages}
+                        </button>
+                      );
+                    }
+
+                    return pages;
+                  })()}
+
+                  {/* Next Button */}
+                  <button
+                    onClick={handleNextPage}
+                    disabled={!paginationInfo.hasNextPage}
+                    className={`relative inline-flex items-center px-3 py-2 rounded-r-lg border border-gray-300 text-sm font-medium transition-colors ${
+                      paginationInfo.hasNextPage
+                        ? 'bg-white text-gray-500 hover:bg-gray-50'
+                        : 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                    }`}
+                  >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>

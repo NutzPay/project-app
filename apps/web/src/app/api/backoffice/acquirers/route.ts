@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Transform the response to include safe data (hide sensitive API keys)
-    const safeAcquirers = acquirers.map(acquirer => ({
+    const safeAcquirers = acquirers.map((acquirer: typeof acquirers[number]) => ({
       ...acquirer,
       apiConfig: acquirer.apiConfig ? '***configured***' : null,
       _count: acquirer._count

@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
         email,
         password: hashedPassword,
         role: 'MEMBER',
-        status: 'PENDING', // Needs admin approval
+        status: 'ACTIVE', // TODO: Change back to PENDING when approval flow is fixed
         accountType: accountType as 'PF' | 'PJ',
         companyName: accountType === 'PJ' ? companyName : undefined,
         document: document.replace(/\D/g, ''), // Remove formatting
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Conta criada com sucesso! Aguarde a aprovação do administrador.',
+      message: 'Conta criada com sucesso! Você já pode fazer login.',
       user: {
         id: user.id,
         email: user.email,

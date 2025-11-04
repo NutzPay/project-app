@@ -7,17 +7,383 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  SUPER_ADMIN
-  ADMIN
-  OWNER
-  MEMBER
+model api_keys {
+  id           String         @id
+  name         String
+  keyHash      String         @unique
+  keySalt      String
+  prefix       String
+  scopes       String[]
+  ipWhitelist  String[]
+  status       ApiKeyStatus   @default(ACTIVE)
+  expiresAt    DateTime?
+  lastUsedAt   DateTime?
+  lastUsedIp   String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime
+  userId       String
+  companyId    String
+  companies    companies      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  users        users          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  request_logs request_logs[]
 }
 
-enum UserStatus {
-  ACTIVE
-  SUSPENDED
-  PENDING
+model audit_logs {
+  id         String      @id
+  action     AuditAction
+  resource   String?
+  resourceId String?
+  details    String?
+  ipAddress  String?
+  userAgent  String?
+  requestId  String?
+  createdAt  DateTime    @default(now())
+  userId     String?
+  companyId  String?
+  companies  companies?  @relation(fields: [companyId], references: [id])
+  users      users?      @relation(fields: [userId], references: [id])
+}
+
+model companies {
+  id                String         @id
+  name              String
+  email             String
+  document          String         @unique
+  status            CompanyStatus  @default(PENDING_VERIFICATION)
+  planId            String?
+  subscriptionId    String?
+  monthlyLimit      Decimal        @default(0)
+  dailyLimit        Decimal        @default(0)
+  requestsPerMinute Int            @default(300)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime
+  api_keys          api_keys[]
+  audit_logs        audit_logs[]
+  plans             plans?         @relation(fields: [planId], references: [id])
+  request_logs      request_logs[]
+  users             users[]
+  webhooks          webhooks[]
+}
+
+model investment_applications {
+  id                   String           @id
+  userId               String
+  planId               String
+  principalAmount      Decimal          @db.Decimal(18, 6)
+  currentValue         Decimal          @db.Decimal(18, 6)
+  accumulatedYield     Decimal          @default(0) @db.Decimal(18, 6)
+  status               InvestmentStatus @default(PENDING)
+  appliedAt            DateTime         @default(now())
+  approvedAt           DateTime?
+  maturityDate         DateTime?
+  liquidatedAt         DateTime?
+  acceptedTermsAt      DateTime?
+  acceptedTermsIp      String?
+  acceptedTermsVersion String?
+  notes                String?
+  metadata             String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime
+  investment_plans     investment_plans @relation(fields: [planId], references: [id], onDelete: Cascade)
+  users                users            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  yield_entries        yield_entries[]
+}
+
+model investment_plans {
+  id                      String                    @id
+  name                    String
+  description             String?
+  type                    InvestmentType
+  annualYieldRate         Decimal                   @db.Decimal(5, 4)
+  dailyYieldRate          Decimal                   @db.Decimal(8, 6)
+  minimumAmount           Decimal                   @db.Decimal(18, 6)
+  maximumAmount           Decimal?                  @db.Decimal(18, 6)
+  lockPeriodDays          Int?
+  hasEarlyWithdraw        Boolean                   @default(false)
+  earlyWithdrawFee        Decimal?                  @db.Decimal(5, 4)
+  isActive                Boolean                   @default(true)
+  requiresApproval        Boolean                   @default(false)
+  maxInvestors            Int?
+  totalCapLimit           Decimal?                  @db.Decimal(18, 6)
+  termsAndConditions      String?
+  riskDisclosure          String?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime
+  investment_applications investment_applications[]
+}
+
+model investment_transactions {
+  id                 String                    @id
+  walletId           String
+  applicationId      String?
+  type               InvestmentTransactionType
+  status             TransactionStatus         @default(PENDING)
+  amount             Decimal                   @db.Decimal(18, 6)
+  balanceAfter       Decimal?                  @db.Decimal(18, 6)
+  planId             String?
+  planName           String?
+  yieldRate          Decimal?                  @db.Decimal(8, 6)
+  description        String?
+  metadata           String?
+  processedAt        DateTime?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime
+  investment_wallets investment_wallets        @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+model investment_wallets {
+  id                      String                    @id
+  userId                  String                    @unique
+  totalInvested           Decimal                   @default(0) @db.Decimal(18, 6)
+  currentValue            Decimal                   @default(0) @db.Decimal(18, 6)
+  totalReturns            Decimal                   @default(0) @db.Decimal(18, 6)
+  totalWithdrawn          Decimal                   @default(0) @db.Decimal(18, 6)
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime
+  investment_transactions investment_transactions[]
+  users                   users                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model offers {
+  id        String        @id
+  title     String
+  subtitle  String?
+  ctaText   String?
+  imagePath String
+  targetUrl String
+  audience  OfferAudience @default(SELLER)
+  isActive  Boolean       @default(true)
+  startsAt  DateTime?
+  endsAt    DateTime?
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime
+  deletedAt DateTime?
+  createdBy String
+  users     users         @relation(fields: [createdBy], references: [id])
+}
+
+model pix_transactions {
+  id           String             @id
+  walletId     String
+  type         PIXTransactionType
+  status       TransactionStatus  @default(PENDING)
+  amount       Decimal            @db.Decimal(10, 2)
+  balanceAfter Decimal?           @db.Decimal(10, 2)
+  pixKey       String?
+  endToEndId   String?
+  pixCode      String?
+  externalId   String?
+  description  String?
+  metadata     String?
+  processedAt  DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime
+  pix_wallets  pix_wallets        @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+model pix_wallets {
+  id               String             @id
+  userId           String             @unique
+  balance          Decimal            @default(0) @db.Decimal(10, 2)
+  totalDeposited   Decimal            @default(0) @db.Decimal(10, 2)
+  totalWithdrawn   Decimal            @default(0) @db.Decimal(10, 2)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime
+  pix_transactions pix_transactions[]
+  users            users              @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model plans {
+  id                String      @id
+  name              String
+  description       String?
+  monthlyFee        Decimal
+  transactionFee    Decimal
+  monthlyLimit      Decimal
+  dailyLimit        Decimal
+  requestsPerMinute Int         @default(300)
+  featuresJson      String
+  active            Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime
+  companies         companies[]
+}
+
+model rate_limit_records {
+  id           String   @id
+  identifier   String
+  windowStart  DateTime
+  requestCount Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+
+  @@unique([identifier, windowStart])
+}
+
+model request_logs {
+  id           String     @id
+  requestId    String     @unique
+  method       String
+  path         String
+  statusCode   Int
+  responseTime Int
+  ipAddress    String
+  userAgent    String?
+  createdAt    DateTime   @default(now())
+  apiKeyId     String?
+  companyId    String?
+  api_keys     api_keys?  @relation(fields: [apiKeyId], references: [id])
+  companies    companies? @relation(fields: [companyId], references: [id])
+}
+
+model sessions {
+  id           String   @id
+  sessionToken String   @unique
+  userId       String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  users        users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model stark_bank_events {
+  id          String    @id
+  eventId     String    @unique
+  eventType   String
+  resource    String
+  payload     String
+  processed   Boolean   @default(false)
+  processedAt DateTime?
+  error       String?
+  createdAt   DateTime  @default(now())
+}
+
+model starkbank_configs {
+  id          String               @id
+  projectId   String               @unique
+  privateKey  String
+  publicKey   String
+  environment StarkbankEnvironment @default(SANDBOX)
+  isActive    Boolean              @default(true)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime
+}
+
+model usdt_transactions {
+  id               String            @id
+  walletId         String
+  type             TransactionType
+  status           TransactionStatus @default(PENDING)
+  amount           Decimal           @db.Decimal(18, 6)
+  balanceAfter     Decimal?          @db.Decimal(18, 6)
+  pixCode          String?
+  pixTransactionId String?
+  brlAmount        Decimal?          @db.Decimal(10, 2)
+  exchangeRate     Decimal?          @db.Decimal(10, 6)
+  description      String?
+  externalId       String?
+  metadata         String?
+  processedAt      DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime
+  usdt_wallets     usdt_wallets      @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+model usdt_wallets {
+  id                String              @id
+  userId            String              @unique
+  balance           Decimal             @default(0) @db.Decimal(18, 6)
+  frozenBalance     Decimal             @default(0) @db.Decimal(18, 6)
+  totalDeposited    Decimal             @default(0) @db.Decimal(18, 6)
+  totalWithdrawn    Decimal             @default(0) @db.Decimal(18, 6)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime
+  usdt_transactions usdt_transactions[]
+  users             users               @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model users {
+  id                       String                    @id
+  email                    String                    @unique
+  name                     String
+  password                 String
+  role                     UserRole                  @default(MEMBER)
+  status                   UserStatus                @default(PENDING)
+  accountType              AccountType?
+  companyName              String?
+  document                 String?
+  emailVerified            Boolean                   @default(false)
+  emailVerifiedAt          DateTime?
+  twoFactorEnabled         Boolean                   @default(false)
+  twoFactorSecret          String?
+  lastLoginAt              DateTime?
+  lastLoginIp              String?
+  exchangeRateFeePercent   Decimal?                  @default(0) @db.Decimal(5, 4)
+  exchangeRateFeeFixed     Decimal?                  @default(0) @db.Decimal(10, 2)
+  pixPayinFeePercent       Decimal?                  @default(0) @db.Decimal(5, 4)
+  pixPayinFeeFixed         Decimal?                  @default(0) @db.Decimal(10, 2)
+  pixPayoutFeePercent      Decimal?                  @default(0) @db.Decimal(5, 4)
+  pixPayoutFeeFixed        Decimal?                  @default(0) @db.Decimal(10, 2)
+  manualWithdrawFeePercent Decimal?                  @default(0) @db.Decimal(5, 4)
+  manualWithdrawFeeFixed   Decimal?                  @default(0) @db.Decimal(10, 2)
+  usdtPurchaseFeePercent   Decimal?                  @default(0) @db.Decimal(5, 4)
+  usdtPurchaseFeeFixed     Decimal?                  @default(0) @db.Decimal(10, 2)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime
+  companyId                String?
+  api_keys                 api_keys[]
+  audit_logs               audit_logs[]
+  investment_applications  investment_applications[]
+  investment_wallets       investment_wallets?
+  offers                   offers[]
+  pix_wallets              pix_wallets?
+  sessions                 sessions[]
+  usdt_wallets             usdt_wallets?
+  companies                companies?                @relation(fields: [companyId], references: [id])
+}
+
+model webhook_deliveries {
+  id             String    @id
+  webhookId      String
+  eventType      String
+  payload        String
+  signature      String
+  responseStatus Int?
+  responseBody   String?
+  deliveredAt    DateTime?
+  createdAt      DateTime  @default(now())
+  webhooks       webhooks  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+}
+
+model webhooks {
+  id                 String               @id
+  url                String
+  secret             String
+  events             String[]
+  status             WebhookStatus        @default(ACTIVE)
+  retryCount         Int                  @default(0)
+  maxRetries         Int                  @default(3)
+  lastTriggeredAt    DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime
+  companyId          String
+  webhook_deliveries webhook_deliveries[]
+  companies          companies            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model yield_entries {
+  id                      String                  @id
+  applicationId           String
+  baseAmount              Decimal                 @db.Decimal(18, 6)
+  yieldRate               Decimal                 @db.Decimal(8, 6)
+  yieldAmount             Decimal                 @db.Decimal(18, 6)
+  referenceDate           DateTime
+  calculatedAt            DateTime                @default(now())
+  isPaid                  Boolean                 @default(false)
+  paidAt                  DateTime?
+  transactionId           String?
+  createdAt               DateTime                @default(now())
+  investment_applications investment_applications @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 }
 
 enum AccountType {
@@ -25,23 +391,10 @@ enum AccountType {
   PJ
 }
 
-enum CompanyStatus {
-  ACTIVE
-  SUSPENDED
-  PENDING_VERIFICATION
-  BLOCKED
-}
-
 enum ApiKeyStatus {
   ACTIVE
   REVOKED
   EXPIRED
-}
-
-enum WebhookStatus {
-  ACTIVE
-  INACTIVE
-  FAILED
 }
 
 enum AuditAction {
@@ -59,269 +412,32 @@ enum AuditAction {
   STARKBANK_CONFIG_UPDATE
 }
 
-enum StarkbankEnvironment {
-  SANDBOX
-  PRODUCTION
+enum CompanyStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+  BLOCKED
 }
 
-model User {
-  id                String      @id @default(cuid())
-  email             String      @unique
-  name              String
-  password          String
-  role              UserRole    @default(MEMBER)
-  status            UserStatus  @default(PENDING)
-  accountType       AccountType?
-  companyName       String?
-  document          String?
-  emailVerified     Boolean     @default(false)
-  emailVerifiedAt   DateTime?
-  twoFactorEnabled  Boolean     @default(false)
-  twoFactorSecret   String?
-  lastLoginAt       DateTime?
-  lastLoginIp       String?
-
-  // Seller Fee Configuration
-  // Exchange rate margin fees (applied over API rate)
-  exchangeRateFeePercent Decimal?    @db.Decimal(5, 4) @default(0) // % margin over API rate (ex: 0.02 = 2%)
-  exchangeRateFeeFixed   Decimal?    @db.Decimal(10, 2) @default(0) // Fixed margin in BRL
-
-  // PIX Pay-in fees (depósitos)
-  pixPayinFeePercent    Decimal?    @db.Decimal(5, 4) @default(0) // % fee (ex: 0.01 = 1%)
-  pixPayinFeeFixed      Decimal?    @db.Decimal(10, 2) @default(0) // Fixed fee in BRL
-
-  // PIX Pay-out fees (saques via API)
-  pixPayoutFeePercent   Decimal?    @db.Decimal(5, 4) @default(0) // % fee
-  pixPayoutFeeFixed     Decimal?    @db.Decimal(10, 2) @default(0) // Fixed fee in BRL
-
-  // Manual withdrawal fees (saque via painel)
-  manualWithdrawFeePercent  Decimal?    @db.Decimal(5, 4) @default(0) // % fee
-  manualWithdrawFeeFixed    Decimal?    @db.Decimal(10, 2) @default(0) // Fixed fee in BRL
-
-  // USDT purchase fees (compra de USDT)
-  usdtPurchaseFeePercent    Decimal?    @db.Decimal(5, 4) @default(0) // % fee
-  usdtPurchaseFeeFixed      Decimal?    @db.Decimal(10, 2) @default(0) // Fixed fee in BRL
-
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-
-  // Relations
-  companyId         String?
-  company           Company?    @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  apiKeys           ApiKey[]
-  auditLogs         AuditLog[]
-  sessions          Session[]
-  createdOffers     Offer[]
-  usdtWallet        USDTWallet?
-  pixWallet         PIXWallet?
-  investmentWallet  InvestmentWallet?
-  investments       InvestmentApplication[]
-  userAcquirers     UserAcquirer[] // Assigned payment acquirers
-
-  @@map("users")
+enum InvestmentStatus {
+  ACTIVE
+  PENDING
+  CANCELLED
+  MATURED
+  LIQUIDATED
 }
 
-model Company {
-  id                String        @id @default(cuid())
-  name              String
-  email             String
-  document          String        @unique // CNPJ
-  status            CompanyStatus @default(PENDING_VERIFICATION)
-  planId            String?
-  subscriptionId    String?
-  
-  // Limits
-  monthlyLimit      Decimal       @default(0)
-  dailyLimit        Decimal       @default(0)
-  requestsPerMinute Int           @default(300)
-  
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-
-  // Relations
-  users             User[]
-  apiKeys           ApiKey[]
-  webhooks          Webhook[]
-  plan              Plan?         @relation(fields: [planId], references: [id])
-  auditLogs         AuditLog[]
-  requestLogs       RequestLog[]
-
-  @@map("companies")
+enum InvestmentTransactionType {
+  INVESTMENT
+  YIELD
+  WITHDRAWAL
+  ADJUSTMENT
 }
 
-model Plan {
-  id                String    @id @default(cuid())
-  name              String
-  description       String?
-  monthlyFee        Decimal
-  transactionFee    Decimal   // Percentage
-  monthlyLimit      Decimal
-  dailyLimit        Decimal
-  requestsPerMinute Int       @default(300)
-  featuresJson      String    // JSON string with features
-  active            Boolean   @default(true)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  // Relations
-  companies         Company[]
-
-  @@map("plans")
-}
-
-model ApiKey {
-  id                String        @id @default(cuid())
-  name              String
-  keyHash           String        @unique // HMAC-SHA256 hash
-  keySalt           String        // Salt unique per key
-  prefix            String        // Public prefix (e.g., "ntz_live_" or "ntz_test_")
-  scopes            String[]      // Array of scopes ["payments:read", "webhooks:*"]
-  ipWhitelist       String[]      // Array of allowed IPs
-  status            ApiKeyStatus  @default(ACTIVE)
-  expiresAt         DateTime?
-  lastUsedAt        DateTime?
-  lastUsedIp        String?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-
-  // Relations
-  userId            String
-  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyId         String
-  company           Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  requestLogs       RequestLog[]
-
-  @@map("api_keys")
-}
-
-model Webhook {
-  id                String        @id @default(cuid())
-  url               String
-  secret            String        // HMAC secret
-  events            String[]      // Array of event types
-  status            WebhookStatus @default(ACTIVE)
-  retryCount        Int           @default(0)
-  maxRetries        Int           @default(3)
-  lastTriggeredAt   DateTime?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-
-  // Relations
-  companyId         String
-  company           Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  deliveries        WebhookDelivery[]
-
-  @@map("webhooks")
-}
-
-model WebhookDelivery {
-  id                String    @id @default(cuid())
-  webhookId         String
-  eventType         String
-  payload           String    // JSON payload
-  signature         String    // HMAC signature
-  responseStatus    Int?
-  responseBody      String?
-  deliveredAt       DateTime?
-  createdAt         DateTime  @default(now())
-
-  // Relations
-  webhook           Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
-
-  @@map("webhook_deliveries")
-}
-
-model Session {
-  id                String    @id @default(cuid())
-  sessionToken      String    @unique
-  userId            String
-  expiresAt         DateTime
-  createdAt         DateTime  @default(now())
-
-  // Relations
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("sessions")
-}
-
-model AuditLog {
-  id                String      @id @default(cuid())
-  action            AuditAction
-  resource          String?     // Resource type (user, apikey, webhook, etc.)
-  resourceId        String?     // ID of the resource
-  details           String?     // JSON with additional details
-  ipAddress         String?
-  userAgent         String?
-  requestId         String?
-  createdAt         DateTime    @default(now())
-
-  // Relations
-  userId            String?
-  user              User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
-  companyId         String?
-  company           Company?    @relation(fields: [companyId], references: [id], onDelete: SetNull)
-
-  @@map("audit_logs")
-}
-
-model RequestLog {
-  id                String    @id @default(cuid())
-  requestId         String    @unique
-  method            String
-  path              String
-  statusCode        Int
-  responseTime      Int       // Response time in milliseconds
-  ipAddress         String
-  userAgent         String?
-  createdAt         DateTime  @default(now())
-
-  // Relations
-  apiKeyId          String?
-  apiKey            ApiKey?   @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
-  companyId         String?
-  company           Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
-
-  @@map("request_logs")
-}
-
-model RateLimitRecord {
-  id                String    @id @default(cuid())
-  identifier        String    // API key or IP
-  windowStart       DateTime
-  requestCount      Int       @default(1)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  @@unique([identifier, windowStart])
-  @@map("rate_limit_records")
-}
-
-// For future Stark Bank integration
-model StarkBankEvent {
-  id                String    @id @default(cuid())
-  eventId           String    @unique // Stark Bank event ID
-  eventType         String
-  resource          String
-  payload           String    // JSON payload from Stark Bank
-  processed         Boolean   @default(false)
-  processedAt       DateTime?
-  error             String?
-  createdAt         DateTime  @default(now())
-
-  @@map("stark_bank_events")
-}
-
-model StarkbankConfig {
-  id                String               @id @default(cuid())
-  projectId         String               @unique // Starkbank Project/Organization ID
-  privateKey        String               // PEM format private key (encrypted storage recommended)
-  publicKey         String               // PEM format public key (for reference/validation)
-  environment       StarkbankEnvironment @default(SANDBOX)
-  isActive          Boolean              @default(true) // Only one config can be active at a time
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-
-  @@map("starkbank_configs")
+enum InvestmentType {
+  FIXED_INCOME
+  LIQUIDITY
+  PREMIUM
 }
 
 enum OfferAudience {
@@ -330,429 +446,53 @@ enum OfferAudience {
   ALL
 }
 
-model Offer {
-  id                String        @id @default(cuid())
-  title             String        // 120 chars max
-  subtitle          String?       // 180 chars max
-  ctaText           String?       // 40 chars max
-  imagePath         String        // Path to uploaded image
-  targetUrl         String        // URL to redirect
-  audience          OfferAudience @default(SELLER)
-  isActive          Boolean       @default(true)
-  startsAt          DateTime?     // When offer becomes active
-  endsAt            DateTime?     // When offer expires
-  sortOrder         Int           @default(0) // For manual sorting
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  deletedAt         DateTime?     // Soft delete
-
-  // Relations
-  createdBy         String
-  creator           User          @relation(fields: [createdBy], references: [id])
-
-  @@map("offers")
+enum PIXTransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT
 }
 
-// USDT Wallet and Transaction Models
-enum TransactionType {
-  DEPOSIT          // PIX → USDT
-  WITHDRAWAL       // USDT → PIX
-  INVESTMENT       // USDT → Investment 
-  RETURN           // Investment → USDT
-  TRANSFER_IN      // Received from another user
-  TRANSFER_OUT     // Sent to another user
-  ADJUSTMENT       // Manual adjustment
+enum StarkbankEnvironment {
+  SANDBOX
+  PRODUCTION
 }
 
 enum TransactionStatus {
-  PENDING          // Waiting for confirmation
-  PROCESSING       // Being processed
-  COMPLETED        // Successfully completed
-  FAILED           // Failed to process
-  CANCELLED        // Cancelled by user or system
-  EXPIRED          // PIX/transaction expired
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  EXPIRED
 }
 
-model USDTWallet {
-  id                String    @id @default(cuid())
-  userId            String    @unique
-  balance           Decimal   @default(0) @db.Decimal(18, 6) // 6 decimal places for USDT
-  frozenBalance     Decimal   @default(0) @db.Decimal(18, 6) // Balance locked in investments
-  totalDeposited    Decimal   @default(0) @db.Decimal(18, 6) // Total deposited over time
-  totalWithdrawn    Decimal   @default(0) @db.Decimal(18, 6) // Total withdrawn over time  
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  // Relations
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions      USDTTransaction[]
-
-  @@map("usdt_wallets")
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  INVESTMENT
+  RETURN
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT
 }
 
-model USDTTransaction {
-  id                String            @id @default(cuid())
-  walletId          String
-  type              TransactionType
-  status            TransactionStatus @default(PENDING)
-  amount            Decimal           @db.Decimal(18, 6)
-  balanceAfter      Decimal?          @db.Decimal(18, 6) // Balance after this transaction
-  
-  // PIX/Payment details
-  pixCode           String?           // PIX code for deposits
-  pixTransactionId  String?           // XGate transaction ID
-  brlAmount         Decimal?          @db.Decimal(10, 2) // BRL amount for PIX transactions
-  exchangeRate      Decimal?          @db.Decimal(10, 6) // BRL/USDT rate at time of transaction
-  
-  // Metadata
-  description       String?
-  externalId        String?           // External system ID (XGate, bank, etc.)
-  metadata          String?           // JSON metadata
-  
-  // Timestamps
-  processedAt       DateTime?         // When transaction was processed
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-
-  // Relations
-  wallet            USDTWallet        @relation(fields: [walletId], references: [id], onDelete: Cascade)
-
-  @@map("usdt_transactions")
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  OWNER
+  MEMBER
 }
 
-// PIX Wallet Model
-model PIXWallet {
-  id                String    @id @default(cuid())
-  userId            String    @unique
-  balance           Decimal   @default(0) @db.Decimal(10, 2) // BRL with 2 decimal places
-  totalDeposited    Decimal   @default(0) @db.Decimal(10, 2) // Total deposited over time
-  totalWithdrawn    Decimal   @default(0) @db.Decimal(10, 2) // Total withdrawn over time
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  // Relations
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions      PIXTransaction[]
-
-  @@map("pix_wallets")
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING
 }
 
-model PIXTransaction {
-  id                String            @id @default(cuid())
-  walletId          String
-  type              PIXTransactionType
-  status            TransactionStatus @default(PENDING)
-  amount            Decimal           @db.Decimal(10, 2) // BRL amount
-  balanceAfter      Decimal?          @db.Decimal(10, 2) // Balance after this transaction
-  
-  // PIX specific details
-  pixKey            String?           // PIX key used
-  endToEndId        String?           // PIX end-to-end ID
-  pixCode           String?           // PIX code for deposits
-  externalId        String?           // External system ID (bank, gateway, etc.)
-  
-  // Payment acquirer/gateway details
-  acquirerId        String?           // Which acquirer processed this transaction
-  provider          String?           // Provider name for backwards compatibility
-  pixTransactionId  String?           // Provider's transaction ID
-  expiresAt         DateTime?         // When PIX code expires
-  
-  // Metadata
-  description       String?
-  metadata          String?           // JSON metadata
-  
-  // Timestamps
-  processedAt       DateTime?         // When transaction was processed
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-
-  // Relations
-  wallet            PIXWallet         @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  acquirer          PaymentAcquirer?  @relation("AcquirerTransactions", fields: [acquirerId], references: [id], onDelete: SetNull)
-
-  @@map("pix_transactions")
+enum WebhookStatus {
+  ACTIVE
+  INACTIVE
+  FAILED
 }
-
-enum PIXTransactionType {
-  DEPOSIT          // Received PIX
-  WITHDRAWAL       // Sent PIX
-  TRANSFER_IN      // Received from another user
-  TRANSFER_OUT     // Sent to another user  
-  ADJUSTMENT       // Manual adjustment
-}
-
-// Investment Wallet Model
-model InvestmentWallet {
-  id                String    @id @default(cuid())
-  userId            String    @unique
-  totalInvested     Decimal   @default(0) @db.Decimal(18, 6) // Total amount invested
-  currentValue      Decimal   @default(0) @db.Decimal(18, 6) // Current total value
-  totalReturns      Decimal   @default(0) @db.Decimal(18, 6) // Total returns received
-  totalWithdrawn    Decimal   @default(0) @db.Decimal(18, 6) // Total withdrawn from investments
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  // Relations
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions      InvestmentTransaction[]
-
-  @@map("investment_wallets")
-}
-
-model InvestmentTransaction {
-  id                String                  @id @default(cuid())
-  walletId          String
-  applicationId     String?                 // Link to investment application
-  type              InvestmentTransactionType
-  status            TransactionStatus       @default(PENDING)
-  amount            Decimal                 @db.Decimal(18, 6)
-  balanceAfter      Decimal?                @db.Decimal(18, 6) // Balance after this transaction
-  
-  // Investment specific details
-  planId            String?                 // Investment plan ID
-  planName          String?                 // Investment plan name
-  yieldRate         Decimal?                @db.Decimal(8, 6)  // Yield rate applied
-  
-  // Metadata
-  description       String?
-  metadata          String?                 // JSON metadata
-  
-  // Timestamps
-  processedAt       DateTime?               // When transaction was processed
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
-
-  // Relations
-  wallet            InvestmentWallet        @relation(fields: [walletId], references: [id], onDelete: Cascade)
-
-  @@map("investment_transactions")
-}
-
-enum InvestmentTransactionType {
-  INVESTMENT       // Money invested in a plan
-  YIELD            // Yield/return credited
-  WITHDRAWAL       // Money withdrawn from investments
-  ADJUSTMENT       // Manual adjustment
-}
-
-// Investment Application Models
-enum InvestmentType {
-  FIXED_INCOME    // Renda fixa
-  LIQUIDITY       // Liquidez diária  
-  PREMIUM         // Premium com lock period
-}
-
-enum InvestmentStatus {
-  ACTIVE          // Ativo rendendo
-  PENDING         // Aguardando aprovação
-  CANCELLED       // Cancelado
-  MATURED         // Vencido/finalizado
-  LIQUIDATED      // Liquidado antecipadamente
-}
-
-model InvestmentPlan {
-  id                String          @id @default(cuid())
-  name              String          // Nome do plano de investimento
-  description       String?         // Descrição detalhada
-  type              InvestmentType  
-  
-  // Return configuration
-  annualYieldRate   Decimal         @db.Decimal(5, 4)  // Taxa anual (ex: 0.1500 = 15%)
-  dailyYieldRate    Decimal         @db.Decimal(8, 6)  // Taxa diária calculada
-  
-  // Investment limits
-  minimumAmount     Decimal         @db.Decimal(18, 6) // Mínimo para investir
-  maximumAmount     Decimal?        @db.Decimal(18, 6) // Máximo por aplicação
-  
-  // Terms
-  lockPeriodDays    Int?            // Período de carência em dias (null = sem carência)
-  hasEarlyWithdraw  Boolean         @default(false)    // Permite saque antecipado
-  earlyWithdrawFee  Decimal?        @db.Decimal(5, 4) // Taxa de saque antecipado
-  
-  // Business rules
-  isActive          Boolean         @default(true)
-  requiresApproval  Boolean         @default(false)    // Requer aprovação manual
-  maxInvestors      Int?            // Limite de investidores
-  totalCapLimit     Decimal?        @db.Decimal(18, 6) // Limite total de captação
-  
-  // Terms and conditions
-  termsAndConditions String?        // Texto dos termos e condições
-  riskDisclosure     String?        // Aviso de riscos
-  
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  
-  // Relations
-  applications      InvestmentApplication[]
-  
-  @@map("investment_plans")
-}
-
-model InvestmentApplication {
-  id                String            @id @default(cuid())
-  userId            String
-  planId            String
-  
-  // Investment details
-  principalAmount   Decimal           @db.Decimal(18, 6) // Valor principal aplicado
-  currentValue      Decimal           @db.Decimal(18, 6) // Valor atual (principal + rendimentos)
-  accumulatedYield  Decimal           @default(0) @db.Decimal(18, 6) // Total de rendimentos acumulados
-  
-  status            InvestmentStatus  @default(PENDING)
-  
-  // Dates
-  appliedAt         DateTime          @default(now())    // Data da aplicação
-  approvedAt        DateTime?         // Data da aprovação (se necessário)
-  maturityDate      DateTime?         // Data de vencimento (se houver)
-  liquidatedAt      DateTime?         // Data de liquidação
-  
-  // Terms acceptance
-  acceptedTermsAt   DateTime?         // Quando aceitou os termos
-  acceptedTermsIp   String?           // IP de onde aceitou
-  acceptedTermsVersion String?        // Versão dos termos aceitos
-  
-  // Metadata
-  notes             String?           // Observações
-  metadata          String?           // Dados adicionais em JSON
-  
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  
-  // Relations
-  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan              InvestmentPlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
-  yieldEntries      YieldEntry[]
-  
-  @@map("investment_applications")
-}
-
-model YieldEntry {
-  id                String                @id @default(cuid())
-  applicationId     String
-  
-  // Yield calculation
-  baseAmount        Decimal               @db.Decimal(18, 6) // Valor base para cálculo
-  yieldRate         Decimal               @db.Decimal(8, 6)  // Taxa aplicada
-  yieldAmount       Decimal               @db.Decimal(18, 6) // Rendimento calculado
-  
-  // Period
-  referenceDate     DateTime              // Data de referência do rendimento
-  calculatedAt      DateTime              @default(now())     // Quando foi calculado
-  
-  // Status
-  isPaid            Boolean               @default(false)     // Se foi creditado
-  paidAt            DateTime?             // Quando foi creditado
-  transactionId     String?               // ID da transação de crédito
-  
-  createdAt         DateTime              @default(now())
-  
-  // Relations
-  application       InvestmentApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  
-  @@map("yield_entries")
-}
-
-// Authorized IPs for Payout Security
-model AuthorizedIP {
-  id                String    @id @default(cuid())
-  ipAddress         String    @unique // IPv4 or IPv6 address
-  description       String?   // Description of this IP (e.g., "Production Server")
-  isActive          Boolean   @default(true) // Whether this IP is currently authorized
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  @@map("authorized_ips")
-}
-
-// Payment Acquirer/Gateway Management System
-enum AcquirerType {
-  PIX          // PIX payment processor (StarkBank, DigitoPay, etc.)
-  CRYPTO       // Crypto gateway (XGate, Binance, etc.)
-  TRADITIONAL  // Traditional payment methods
-}
-
-enum AcquirerStatus {
-  ACTIVE       // Configured and ready to use
-  INACTIVE     // Configured but disabled
-  ERROR        // Configuration error
-  TESTING      // In test mode
-}
-
-enum FeeType {
-  PERCENTAGE   // Percentage fee (e.g., 2.5%)
-  FIXED        // Fixed amount fee (e.g., R$ 1.50)
-  PERCENTAGE_MIN // Percentage with minimum amount (e.g., 2.5% min R$ 5.00)
-}
-
-model PaymentAcquirer {
-  id                String          @id @default(cuid())
-  name              String          // Display name (e.g., "StarkBank", "DigitoPay")
-  slug              String          @unique // URL-safe identifier (e.g., "starkbank", "digitopay")
-  type              AcquirerType    // PIX, CRYPTO, TRADITIONAL
-  status            AcquirerStatus  @default(INACTIVE)
-  
-  // API Configuration (stored as encrypted JSON)
-  apiConfig         String?         // JSON with API keys, endpoints, etc.
-  testMode          Boolean         @default(true) // Whether in test mode
-  
-  // Fee Configuration
-  feeConfig         String?         // JSON with fee structure
-  
-  // Feature flags
-  supportsDeposits  Boolean         @default(true)
-  supportsWithdrawals Boolean       @default(true)
-  supportsWebhooks  Boolean         @default(true)
-  
-  // Operational data
-  lastTestAt        DateTime?       // Last successful test
-  lastErrorAt       DateTime?       // Last error occurrence
-  lastErrorMessage  String?         // Last error details
-  
-  // Metadata
-  description       String?         // Admin description
-  logoUrl           String?         // Logo for UI display
-  documentationUrl  String?         // Link to API docs
-  
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  
-  // Relations
-  userAcquirers     UserAcquirer[]  // Which users/sellers use this acquirer
-  transactions      PIXTransaction[] @relation("AcquirerTransactions")
-
-  @@map("payment_acquirers")
-}
-
-// Junction table: Which acquirer is assigned to which user/seller
-model UserAcquirer {
-  id                String              @id @default(cuid())
-  userId            String              
-  acquirerId        String              
-  
-  // Configuration specific to this user-acquirer relationship
-  isActive          Boolean             @default(true)
-  priority          Int                 @default(0) // Higher priority = preferred choice
-  
-  // Override fee configuration for this user
-  customFeeConfig   String?             // JSON with custom fees for this seller
-  
-  // Limits for this user with this acquirer
-  dailyLimit        Decimal?            @db.Decimal(15, 2) // Daily transaction limit
-  monthlyLimit      Decimal?            @db.Decimal(15, 2) // Monthly transaction limit
-  
-  // Operational data
-  totalVolume       Decimal             @default(0) @db.Decimal(15, 2) // Total processed volume
-  totalTransactions Int                 @default(0) // Total transaction count
-  lastUsedAt        DateTime?           // Last transaction with this acquirer
-  
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  
-  // Relations
-  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  acquirer          PaymentAcquirer     @relation(fields: [acquirerId], references: [id], onDelete: Cascade)
-  
-  @@unique([userId, acquirerId])
-  @@map("user_acquirers")
-}
-

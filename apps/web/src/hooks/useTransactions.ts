@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchUserTransactions, transformTransactionData } from '@/lib/api/transactions';
 
 interface TransactionFilters {
@@ -10,7 +10,7 @@ interface TransactionFilters {
 
 export function useTransactions(filters?: TransactionFilters) {
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false); // Start with false to avoid flash of loading state
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<any>(null);
   const [pagination, setPagination] = useState({
@@ -20,8 +20,27 @@ export function useTransactions(filters?: TransactionFilters) {
     totalPages: 0,
   });
 
+  // Use ref to prevent infinite loops
+  const isLoadingRef = useRef(false);
+  const lastFiltersRef = useRef<string>('');
+
   const loadTransactions = useCallback(async () => {
+    // Prevent concurrent requests
+    if (isLoadingRef.current) {
+      console.log('⏳ Request already in progress, skipping...');
+      return;
+    }
+
+    // Check if filters actually changed
+    const filtersString = JSON.stringify(filters || {});
+    if (lastFiltersRef.current === filtersString) {
+      console.log('🔄 Filters unchanged, skipping request');
+      return;
+    }
+
     try {
+      isLoadingRef.current = true;
+      lastFiltersRef.current = filtersString;
       setLoading(true);
       setError(null);
 
@@ -44,48 +63,33 @@ export function useTransactions(filters?: TransactionFilters) {
         const errorMessage = response.error || 'Erro desconhecido';
         console.log('❌ API error:', errorMessage);
 
-        // For authentication errors, show friendly message but use mock data
-        if (errorMessage.includes('não autenticado')) {
-          setError('Para ver transações reais, faça login no sistema.');
-          console.log('🔒 Using mock data due to authentication');
-        } else if (errorMessage.includes('conexão')) {
-          setError('Erro de conexão. Usando dados de demonstração.');
-          console.log('🌐 Using mock data due to connection error');
-        } else {
-          setError(`${errorMessage}. Usando dados de demonstração.`);
-          console.log('⚠️ Using mock data due to API error');
-        }
+        // Set error but keep existing transactions to avoid UI flicker
+        setError(`API Error: ${errorMessage}`);
 
-        // Always set empty transactions on API failure to force fallback to mock
-        setTransactions([]);
-        setPagination({
-          page: 1,
-          limit: 20,
-          total: 0,
-          totalPages: 0,
-        });
-        setStats(null);
+        // Don't clear transactions - let the component decide fallback
       }
     } catch (err) {
       console.error('💥 Unexpected error in loadTransactions:', err);
-      setError('Erro inesperado. Usando dados de demonstração.');
-
-      // Fallback to empty array to trigger mock data
-      setTransactions([]);
-      setPagination({
-        page: 1,
-        limit: 20,
-        total: 0,
-        totalPages: 0,
-      });
-      setStats(null);
+      setError('Erro de conexão com a API');
     } finally {
       setLoading(false);
+      isLoadingRef.current = false;
     }
-  }, [filters]);
+  }, []);
 
+  // Only reload when filters actually change (deep comparison)
   useEffect(() => {
-    loadTransactions();
+    const filtersString = JSON.stringify(filters || {});
+    if (lastFiltersRef.current !== filtersString) {
+      loadTransactions();
+    }
+  }, [filters, loadTransactions]);
+
+  // Initial load
+  useEffect(() => {
+    if (lastFiltersRef.current === '') {
+      loadTransactions();
+    }
   }, [loadTransactions]);
 
   const refetch = () => {

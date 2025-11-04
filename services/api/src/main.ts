@@ -86,33 +86,152 @@ async function bootstrap() {
 
   // Swagger documentation
   const config = new DocumentBuilder()
-    .setTitle('NutzBeta API')
-    .setDescription('Gateway de pagamentos com recursos de segurança avançados')
+    .setTitle('NutzBeta Payment Gateway API')
+    .setDescription(`
+# NutzBeta Payment Gateway API
+
+API completa para integração com o gateway de pagamentos NutzBeta.
+
+## Autenticação
+
+Esta API utiliza **API Keys** para autenticação. Para usar a API:
+
+1. Gere uma API key através do dashboard
+2. Use a API key no header Authorization: \`Bearer <sua_api_key>\`
+3. Certifique-se de que sua API key possui os **scopes** necessários
+
+## Scopes Disponíveis
+
+- \`payments:read\` - Ler informações de pagamentos
+- \`payments:write\` - Criar novos pagamentos
+- \`webhooks:read\` - Ler configurações de webhooks
+- \`webhooks:write\` - Configurar webhooks
+- \`account:read\` - Ler informações da conta
+- \`*\` - Acesso completo (use com cuidado)
+
+## Rate Limiting
+
+- **10 requests por segundo** (burst)
+- **300 requests por minuto**
+- **1000 requests por hora**
+    `)
     .setVersion('1.0')
     .addBearerAuth(
       {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'API Key',
-        description: 'Use o formato: NutzKey <sua_api_key>',
+        description: 'Insira sua API key (formato: ntz_test_xxx ou ntz_live_xxx)',
       },
-      'apikey',
+      'ApiKeyAuth',
     )
-    .addTag('Authentication', 'Autenticação e autorização')
-    .addTag('API Keys', 'Gerenciamento de chaves de API')
-    .addTag('Webhooks', 'Gerenciamento de webhooks')
-    .addTag('Companies', 'Gerenciamento de empresas')
-    .addTag('Users', 'Gerenciamento de usuários')
+    .addTag('API Keys', 'Gerenciamento de chaves de API para integração')
+    .addTag('Payments', '💳 Processamento de pagamentos - Core da API')
+    .addTag('Webhooks', '🔔 Notificações em tempo real')
+    .addTag('Authentication', '🔐 Autenticação e autorização')
+    .addTag('Companies', '🏢 Gerenciamento de empresas')
+    .addTag('Users', '👤 Gerenciamento de usuários')
+    .addTag('Transactions', '💸 Histórico de transações')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document, {
-    customSiteTitle: 'NutzBeta API Documentation',
+    customSiteTitle: 'NutzBeta Payment Gateway API',
     customfavIcon: '/favicon.ico',
     customCss: `
       .swagger-ui .topbar { display: none }
-      .swagger-ui .info .title { color: #4F46E5 }
+      .swagger-ui .info .title {
+        color: #4F46E5;
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 20px;
+      }
+      .swagger-ui .info .description {
+        font-size: 1.1rem;
+        line-height: 1.6;
+      }
+      .swagger-ui .opblock .opblock-summary-description {
+        font-weight: 600;
+      }
+      .swagger-ui .opblock.opblock-post {
+        border-color: #10b981;
+        background: rgba(16, 185, 129, 0.03);
+      }
+      .swagger-ui .opblock.opblock-get {
+        border-color: #3b82f6;
+        background: rgba(59, 130, 246, 0.03);
+      }
+      .swagger-ui .opblock.opblock-delete {
+        border-color: #ef4444;
+        background: rgba(239, 68, 68, 0.03);
+      }
+      .swagger-ui .scheme-container {
+        background: #f8fafc;
+        padding: 20px;
+        border-radius: 8px;
+        margin: 20px 0;
+        border-left: 4px solid #4F46E5;
+      }
+      .swagger-ui .auth-wrapper {
+        padding: 20px;
+        background: #fef3c7;
+        border-radius: 8px;
+        margin: 15px 0;
+      }
+      .swagger-ui .auth-container .auth-btn-wrapper {
+        text-align: center;
+        margin-top: 15px;
+      }
+      .swagger-ui .btn.authorize {
+        background: #4F46E5;
+        border-color: #4F46E5;
+        font-weight: 600;
+        padding: 8px 20px;
+      }
+      .swagger-ui .btn.authorize:hover {
+        background: #3730a3;
+      }
+      .swagger-ui .info h1, .swagger-ui .info h2, .swagger-ui .info h3 {
+        color: #1f2937;
+      }
+      .swagger-ui .opblock-tag {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #374151;
+        margin: 30px 0 15px 0;
+      }
+      .swagger-ui .parameter__name {
+        font-weight: 600;
+      }
+      .swagger-ui .response-col_status {
+        font-weight: 600;
+      }
     `,
+    swaggerOptions: {
+      persistAuthorization: true,
+      displayRequestDuration: true,
+      filter: true,
+      tryItOutEnabled: true,
+      requestSnippetsEnabled: true,
+      requestSnippets: {
+        generators: {
+          "curl_bash": {
+            "title": "cURL (bash)",
+            "syntax": "bash"
+          },
+          "curl_powershell": {
+            "title": "cURL (PowerShell)",
+            "syntax": "powershell"
+          },
+          "curl_cmd": {
+            "title": "cURL (CMD)",
+            "syntax": "bash"
+          }
+        },
+        defaultExpanded: false,
+        languages: null
+      }
+    }
   });
 
   // Health check

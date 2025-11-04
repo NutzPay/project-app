@@ -67,11 +67,6 @@ export default function BackofficeLoginPage() {
     });
   };
 
-  // Função para preencher credenciais de teste
-  const fillCredentials = (email: string, password: string) => {
-    setFormData({ email, password });
-  };
-
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4">
       {/* Subtle background pattern */}
@@ -216,48 +211,6 @@ export default function BackofficeLoginPage() {
                   )}
                 </button>
               </form>
-
-              {/* Development Credentials */}
-              <div className="mt-8 p-4 bg-gray-900/20 border border-gray-800/30 rounded-lg">
-                <div className="text-center mb-3">
-                  <p className="text-xs text-gray-400 font-medium">Ambiente de Desenvolvimento</p>
-                </div>
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => fillCredentials('admin@nutzpay.com', 'admin123')}
-                    className="w-full text-left p-3 bg-gray-800/30 hover:bg-gray-800/50 rounded-lg transition-colors group border border-gray-700/30 hover:border-gray-600/50"
-                    disabled={loading}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-white">Super Admin</div>
-                        <div className="text-xs text-gray-400">admin@nutzpay.com</div>
-                      </div>
-                      <div className="text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                        Clique para preencher
-                      </div>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => fillCredentials('ops@nutzpay.com', 'ops123')}
-                    className="w-full text-left p-3 bg-gray-800/30 hover:bg-gray-800/50 rounded-lg transition-colors group border border-gray-700/30 hover:border-gray-600/50"
-                    disabled={loading}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-white">Operations</div>
-                        <div className="text-xs text-gray-400">ops@nutzpay.com</div>
-                      </div>
-                      <div className="text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                        Clique para preencher
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              </div>
 
               {/* Footer */}
               <div className="mt-6 pt-6 border-t border-gray-800/30">

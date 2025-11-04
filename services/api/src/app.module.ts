@@ -16,6 +16,9 @@ import { StarkbankModule } from './starkbank/starkbank.module';
 import { XGateModule } from './integrations/xgate/xgate.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { OffersModule } from './offers/offers.module';
+import { PaymentsModule } from './payments/payments.module';
+import { WebhooksDocsModule } from './webhooks-docs/webhooks-docs.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -76,6 +79,9 @@ import { OffersModule } from './offers/offers.module';
     XGateModule,
     TransactionsModule,
     OffersModule,
+    PaymentsModule,
+    WebhooksDocsModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

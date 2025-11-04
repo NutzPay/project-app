@@ -224,7 +224,7 @@ export default function BannerConfigModal({ isOpen, onClose, banner, onSave }: B
                   value={formData.title}
                   onChange={(e) => handleInputChange('title', e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                  placeholder="Nova API de Pagamentos"
+                  placeholder="Cartão de Crédito"
                   maxLength={120}
                   required
                 />
@@ -241,7 +241,7 @@ export default function BannerConfigModal({ isOpen, onClose, banner, onSave }: B
                   value={formData.subtitle}
                   onChange={(e) => handleInputChange('subtitle', e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
-                  placeholder="Conheça a integração mais rápida para sellers"
+                  placeholder="Tenha seu próprio cartão usando saldo da conta"
                   maxLength={180}
                   rows={3}
                 />

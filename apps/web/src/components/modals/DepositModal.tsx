@@ -389,8 +389,12 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
   const handleSubmit = async () => {
     if (form.method === 'pix') {
       setStep('processing');
-      
+
       try {
+        // TEMPORÁRIO: Dados hardcoded do usuário (Felix Elmada)
+        const userName = 'Felix Elmada';
+        const userDocument = '08655680494';
+
         // Fazer chamada para API Bettrix
         const response = await fetch('/api/bettrix/pix/create', {
           method: 'POST',
@@ -400,8 +404,8 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
           credentials: 'include', // Include cookies in the request
           body: JSON.stringify({
             amount: parseFloat(form.amount),
-            name: 'Usuário Seller', // Idealmente pegar do contexto do usuário
-            taxId: '000.000.000-00', // Idealmente pegar do perfil do usuário
+            name: userName,
+            taxId: userDocument,
             description: `Depósito de R$ ${form.amount}`,
             externalId: `deposit_${Date.now()}`
           })
@@ -442,8 +446,8 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
             brlAmount: priceCalculation?.calculation?.finalPrice || parseFloat(form.amount) * 5.5, // Amount in BRL from calculation
             usdtAmount: parseFloat(form.amount), // Amount of USDT requested
             exchangeRate: priceCalculation?.calculation?.exchangeRate || 5.5,
-            payerName: 'Usuário Seller',
-            payerDocument: '000.000.000-00'
+            payerName: 'Felix Elmada',
+            payerDocument: '08655680494'
           })
         });
 
@@ -643,12 +647,39 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                   <p className="text-xs text-gray-600">
                     Valor mínimo: $1.00 USD • Você receberá exatamente a quantidade solicitada
                   </p>
-                  
+
+                  {/* Limit warning */}
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <div className="flex items-start space-x-2">
+                      <svg className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="text-xs text-yellow-800">
+                        <p className="font-semibold">Limite por transação: R$ 500,00</p>
+                        <p className="mt-1">O valor total em BRL não pode exceder R$ 500 por transação.</p>
+                      </div>
+                    </div>
+                  </div>
+
                   {calculationLoading && (
                     <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                       <div className="animate-pulse flex items-center space-x-2">
                         <div className="h-3 w-3 bg-gray-300 rounded-full"></div>
                         <div className="h-3 bg-gray-300 rounded w-32"></div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Show error if amount exceeds limit */}
+                  {priceCalculation && priceCalculation.calculation?.finalPrice > 500 && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <div className="flex items-start space-x-2">
+                        <svg className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p className="text-xs text-red-800 font-medium">
+                          Valor excede o limite de R$ 500,00. Por favor, reduza a quantidade de USDT.
+                        </p>
                       </div>
                     </div>
                   )}
@@ -683,7 +714,13 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
 
             <button
               onClick={handleSubmit}
-              disabled={!form.amount || (form.method === 'usdt' && parseFloat(form.amount) < 1) || calculationLoading || (form.method === 'usdt' && !priceCalculation)}
+              disabled={
+                !form.amount ||
+                (form.method === 'usdt' && parseFloat(form.amount) < 1) ||
+                calculationLoading ||
+                (form.method === 'usdt' && !priceCalculation) ||
+                (form.method === 'usdt' && priceCalculation && priceCalculation.calculation?.finalPrice > 500)
+              }
               className="w-full px-6 py-3 bg-gray-900 text-white rounded-lg font-semibold hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
             >
               {(() => {

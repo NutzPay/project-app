@@ -219,28 +219,7 @@ export default function LoginPage() {
               )}
             </button>
 
-            {/* Credenciais de teste */}
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <p className="text-sm text-gray-600 mb-4 text-center">Credenciais de teste:</p>
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setFormData({email: 'admin@nutzbeta.com', password: 'admin123'})}
-                  className="w-full text-left px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <strong>Super Admin:</strong> admin@nutzbeta.com / admin123
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData({email: 'owner@exemplo.com', password: 'owner123'})}
-                  className="w-full text-left px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <strong>Owner:</strong> owner@exemplo.com / owner123
-                </button>
-              </div>
-            </div>
-
-            <div className="text-center pt-6">
+            <div className="text-center pt-6 mt-6 border-t border-gray-200">
               <span className="text-gray-600">Não tem uma conta? </span>
               <Link href="/auth/register" className="font-medium text-red-600 hover:text-red-500">
                 Criar conta

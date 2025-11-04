@@ -40,6 +40,16 @@ export async function getCurrentUser(request: NextRequest): Promise<User | null>
       return null;
     }
 
+    // Check if user status is ACTIVE (block PENDING and SUSPENDED users)
+    if (user.status !== 'ACTIVE') {
+      console.log('🚫 User account not active:', {
+        userId: user.id,
+        email: user.email,
+        status: user.status
+      });
+      return null;
+    }
+
     const authUser: User = {
       id: user.id,
       email: user.email,
@@ -53,7 +63,8 @@ export async function getCurrentUser(request: NextRequest): Promise<User | null>
     console.log('✅ User authenticated from database:', {
       id: authUser.id,
       email: authUser.email,
-      role: authUser.role
+      role: authUser.role,
+      status: authUser.status
     });
 
     return authUser;

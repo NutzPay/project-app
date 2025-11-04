@@ -153,4 +153,13 @@ export class CompaniesController {
     const companyId = req.user.role === UserRole.SUPER_ADMIN ? undefined : req.user.companyId;
     return this.companiesService.getStats(companyId);
   }
+
+  @ApiOperation({ summary: 'Get company fee configuration' })
+  @ApiResponse({ status: 200, description: 'Company fees retrieved successfully' })
+  @Get(':id/fees')
+  getFees(@Param('id') id: string, @Request() req) {
+    // Users can only see their own company fees, unless they are super admin
+    const requestedId = req.user.role === UserRole.SUPER_ADMIN ? id : req.user.companyId;
+    return this.companiesService.getFees(requestedId);
+  }
 }

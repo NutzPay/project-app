@@ -107,4 +107,36 @@ export class UsersService {
       emailVerifiedAt: new Date(),
     });
   }
+
+  async getCompanyFees(companyId: string) {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    if (!company) {
+      throw new NotFoundException('Company not found');
+    }
+
+    return {
+      success: true,
+      fees: {
+        pixPayIn: {
+          percentage: 0,
+          fixed: 0,
+        },
+        pixPayOut: {
+          percentage: 0,
+          fixed: 0,
+        },
+        withdrawal: {
+          percentage: 0,
+          fixed: 0,
+        },
+      },
+    };
+  }
 }

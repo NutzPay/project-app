@@ -1,0 +1,11 @@
+version: "2"
+authtoken: ""
+tunnels:
+  web:
+    addr: 3000
+    proto: http
+    inspect: true
+  api:
+    addr: 3001
+    proto: http
+    inspect: true

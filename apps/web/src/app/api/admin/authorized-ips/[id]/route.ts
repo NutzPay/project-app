@@ -27,8 +27,8 @@ export async function PATCH(
     return NextResponse.json({ ip });
   } catch (error) {
     console.error('Error updating authorized IP:', error);
-    
-    if (error.code === 'P2025') {
+
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2025') {
       return NextResponse.json(
         { error: 'IP not found' },
         { status: 404 }
@@ -65,8 +65,8 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting authorized IP:', error);
-    
-    if (error.code === 'P2025') {
+
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2025') {
       return NextResponse.json(
         { error: 'IP not found' },
         { status: 404 }

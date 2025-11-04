@@ -173,13 +173,31 @@ model User {
   companyName       String?
   document          String?
   emailVerified     Boolean     @default(false)
-  emailVerifiedAt   DateTime?
-  twoFactorEnabled  Boolean     @default(false)
+  emailVerificationToken String?   @map("email_verification_token") // Token para verificação de e-mail
+  emailVerificationExpires DateTime? @map("email_verification_expires") // Expiração do token de verificação
+  emailVerifiedAt   DateTime? @map("email_verified_at") // Data de verificação do e-mail
+  twoFactorEnabled  Boolean     @default(true) // 2FA obrigatório por padrão
   twoFactorSecret   String?
+  twoFactorCode     String?     @map("two_factor_code") // Código 2FA temporário
+  twoFactorCodeExpires DateTime? @map("two_factor_code_expires") // Expiração do código 2FA
   lastLoginAt       DateTime?
   lastLoginIp       String?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
+
+  // Fee Configuration - Per-seller customizable fees
+  monthlyFee                Decimal?  @db.Decimal(10, 2) @map("monthly_fee")  // Monthly fee in BRL
+  transactionFee            Decimal?  @db.Decimal(5, 4) @map("transaction_fee")   // Transaction fee percentage (e.g., 0.0200 = 2%)
+  exchangeRateFeePercent    Decimal?  @db.Decimal(5, 4) @map("exchange_rate_fee_percent")   // Exchange rate margin percentage
+  exchangeRateFeeFixed      Decimal?  @db.Decimal(10, 2) @map("exchange_rate_fee_fixed")  // Fixed exchange rate fee in BRL
+  pixPayinFeePercent        Decimal?  @db.Decimal(5, 4) @map("pix_payin_fee_percent")   // PIX deposit fee percentage
+  pixPayinFeeFixed          Decimal?  @db.Decimal(10, 2) @map("pix_payin_fee_fixed")  // Fixed PIX deposit fee in BRL
+  pixPayoutFeePercent       Decimal?  @db.Decimal(5, 4) @map("pix_payout_fee_percent")   // PIX withdrawal fee percentage
+  pixPayoutFeeFixed         Decimal?  @db.Decimal(10, 2) @map("pix_payout_fee_fixed")  // Fixed PIX withdrawal fee in BRL
+  manualWithdrawFeePercent  Decimal?  @db.Decimal(5, 4) @map("manual_withdraw_fee_percent")   // Manual withdrawal fee percentage
+  manualWithdrawFeeFixed    Decimal?  @db.Decimal(10, 2) @map("manual_withdraw_fee_fixed")  // Fixed manual withdrawal fee in BRL
+  usdtPurchaseFeePercent    Decimal?  @db.Decimal(5, 4) @map("usdt_purchase_fee_percent")   // USDT purchase fee percentage
+  usdtPurchaseFeeFixed      Decimal?  @db.Decimal(10, 2) @map("usdt_purchase_fee_fixed")  // Fixed USDT purchase fee in BRL
 
   // Relations
   companyId         String?
@@ -999,7 +1017,7 @@ model CommissionEarning {
 
   // Relations
   salesRep          SalesRep            @relation(fields: [salesRepId], references: [id], onDelete: Cascade)
-  seller            User                @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  seller            User                @relation("SellerCommissions", fields: [sellerId], references: [id], onDelete: Cascade)
 
   @@map("commission_earnings")
 }

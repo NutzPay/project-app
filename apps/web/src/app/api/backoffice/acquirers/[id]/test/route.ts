@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
-import { getDigitoPayService } from '@/lib/digitopay';
+// import { getDigitoPayService } from '@/lib/digitopay'; // Temporariamente desabilitado
 import { getXGateService } from '@/lib/xgate';
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
@@ -41,27 +41,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       // Test based on acquirer slug
       switch (acquirer.slug) {
         case 'digitopay':
-          const digitoPayService = getDigitoPayService();
-          
-          // Test authentication
-          if (digitoPayService.isConfigured()) {
-            testResult = {
-              success: true,
-              message: 'DigitoPay configurado e pronto para uso',
-              details: {
-                configured: true,
-                testMode: acquirer.testMode,
-                supportsDeposits: acquirer.supportsDeposits,
-                supportsWebhooks: acquirer.supportsWebhooks
-              }
-            };
-          } else {
-            testResult = {
-              success: false,
-              message: 'DigitoPay não configurado corretamente. Verifique as credenciais.',
-              details: { configured: false }
-            };
-          }
+          // Temporariamente desabilitado
+          testResult = {
+            success: false,
+            message: 'DigitoPay temporariamente desabilitado',
+            details: { configured: false }
+          };
           break;
 
         case 'xgate':

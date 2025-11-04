@@ -143,6 +143,7 @@ export async function GET(
         createdAt: true,
         updatedAt: true,
         companyName: true,
+        // Fee fields
         exchangeRateFeePercent: true,
         exchangeRateFeeFixed: true,
         pixPayinFeePercent: true,
@@ -305,187 +306,49 @@ export async function PATCH(
       );
     }
 
-    // Validate input and track changes for audit
-    const updateData: any = {};
-    const changes: Array<{field: string, oldValue: any, newValue: any}> = [];
-
-    if (body.exchangeRateFeePercent !== undefined) {
-      if (body.exchangeRateFeePercent < 0 || body.exchangeRateFeePercent > 1) {
-        return NextResponse.json(
-          { success: false, error: 'Taxa percentual de câmbio deve estar entre 0% e 100%' },
-          { status: 400 }
-        );
-      }
-      const oldValue = currentSeller.exchangeRateFeePercent ? parseFloat(currentSeller.exchangeRateFeePercent.toString()) : null;
-      if (oldValue !== body.exchangeRateFeePercent) {
-        changes.push({
-          field: 'exchangeRateFeePercent',
-          oldValue: oldValue ? `${(oldValue * 100).toFixed(2)}%` : 'Não definido',
-          newValue: `${(body.exchangeRateFeePercent * 100).toFixed(2)}%`
-        });
-      }
-      updateData.exchangeRateFeePercent = body.exchangeRateFeePercent;
-    }
-
-    if (body.exchangeRateFeeFixed !== undefined) {
-      if (body.exchangeRateFeeFixed < 0) {
-        return NextResponse.json(
-          { success: false, error: 'Taxa fixa de câmbio deve ser positiva' },
-          { status: 400 }
-        );
-      }
-      const oldValue = currentSeller.exchangeRateFeeFixed ? parseFloat(currentSeller.exchangeRateFeeFixed.toString()) : null;
-      if (oldValue !== body.exchangeRateFeeFixed) {
-        changes.push({
-          field: 'exchangeRateFeeFixed',
-          oldValue: oldValue ? `R$ ${oldValue.toFixed(2)}` : 'Não definido',
-          newValue: `R$ ${body.exchangeRateFeeFixed.toFixed(2)}`
-        });
-      }
-      updateData.exchangeRateFeeFixed = body.exchangeRateFeeFixed;
-    }
-
-    // Validate percentage fees (should be between 0 and 1) and track changes
-    const percentageFields = [
-      { key: 'pixPayinFeePercent', label: 'Taxa PIX Pay-in (%)' },
-      { key: 'pixPayoutFeePercent', label: 'Taxa PIX Pay-out (%)' },
-      { key: 'manualWithdrawFeePercent', label: 'Taxa Saque Manual (%)' },
-      { key: 'usdtPurchaseFeePercent', label: 'Taxa Compra USDT (%)' }
-    ];
-
-    for (const { key, label } of percentageFields) {
-      if (body[key as keyof FeeUpdateRequest] !== undefined) {
-        const value = body[key as keyof FeeUpdateRequest] as number;
-        if (value < 0 || value > 1) {
-          return NextResponse.json(
-            { success: false, error: `${label} deve estar entre 0% e 100%` },
-            { status: 400 }
-          );
-        }
-        const oldValue = (currentSeller as any)[key] ? parseFloat((currentSeller as any)[key].toString()) : null;
-        if (oldValue !== value) {
-          changes.push({
-            field: key,
-            oldValue: oldValue ? `${(oldValue * 100).toFixed(2)}%` : 'Não definido',
-            newValue: `${(value * 100).toFixed(2)}%`
-          });
-        }
-        updateData[key] = value;
-      }
-    }
-
-    // Validate fixed fees (should be positive) and track changes
-    const fixedFields = [
-      { key: 'pixPayinFeeFixed', label: 'Taxa PIX Pay-in (R$)' },
-      { key: 'pixPayoutFeeFixed', label: 'Taxa PIX Pay-out (R$)' },
-      { key: 'manualWithdrawFeeFixed', label: 'Taxa Saque Manual (R$)' },
-      { key: 'usdtPurchaseFeeFixed', label: 'Taxa Compra USDT (R$)' }
-    ];
-
-    for (const { key, label } of fixedFields) {
-      if (body[key as keyof FeeUpdateRequest] !== undefined) {
-        const value = body[key as keyof FeeUpdateRequest] as number;
-        if (value < 0) {
-          return NextResponse.json(
-            { success: false, error: `${label} deve ser positiva` },
-            { status: 400 }
-          );
-        }
-        const oldValue = (currentSeller as any)[key] ? parseFloat((currentSeller as any)[key].toString()) : null;
-        if (oldValue !== value) {
-          changes.push({
-            field: key,
-            oldValue: oldValue ? `R$ ${oldValue.toFixed(2)}` : 'Não definido',
-            newValue: `R$ ${value.toFixed(2)}`
-          });
-        }
-        updateData[key] = value;
-      }
-    }
-
-    // If no changes, return early
-    if (changes.length === 0) {
-      return NextResponse.json({
-        success: true,
-        message: 'Nenhuma alteração detectada'
-      });
-    }
-
-    // Update seller in database
+    // Update seller fees
     const updatedSeller = await prisma.user.update({
       where: { id: sellerId },
-      data: updateData,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        exchangeRateFeePercent: true,
-        exchangeRateFeeFixed: true,
-        pixPayinFeePercent: true,
-        pixPayinFeeFixed: true,
-        pixPayoutFeePercent: true,
-        pixPayoutFeeFixed: true,
-        manualWithdrawFeePercent: true,
-        manualWithdrawFeeFixed: true,
-        usdtPurchaseFeePercent: true,
-        usdtPurchaseFeeFixed: true,
-        updatedAt: true,
+      data: {
+        exchangeRateFeePercent: body.exchangeRateFeePercent,
+        exchangeRateFeeFixed: body.exchangeRateFeeFixed,
+        pixPayinFeePercent: body.pixPayinFeePercent,
+        pixPayinFeeFixed: body.pixPayinFeeFixed,
+        pixPayoutFeePercent: body.pixPayoutFeePercent,
+        pixPayoutFeeFixed: body.pixPayoutFeeFixed,
+        manualWithdrawFeePercent: body.manualWithdrawFeePercent,
+        manualWithdrawFeeFixed: body.manualWithdrawFeeFixed,
+        usdtPurchaseFeePercent: body.usdtPurchaseFeePercent,
+        usdtPurchaseFeeFixed: body.usdtPurchaseFeeFixed,
       },
     });
 
-    // Format response
-    const formattedSeller = {
-      ...updatedSeller,
-      exchangeRateFeePercent: updatedSeller.exchangeRateFeePercent ? parseFloat(updatedSeller.exchangeRateFeePercent.toString()) : null,
-      exchangeRateFeeFixed: updatedSeller.exchangeRateFeeFixed ? parseFloat(updatedSeller.exchangeRateFeeFixed.toString()) : null,
-      pixPayinFeePercent: updatedSeller.pixPayinFeePercent ? parseFloat(updatedSeller.pixPayinFeePercent.toString()) : null,
-      pixPayinFeeFixed: updatedSeller.pixPayinFeeFixed ? parseFloat(updatedSeller.pixPayinFeeFixed.toString()) : null,
-      pixPayoutFeePercent: updatedSeller.pixPayoutFeePercent ? parseFloat(updatedSeller.pixPayoutFeePercent.toString()) : null,
-      pixPayoutFeeFixed: updatedSeller.pixPayoutFeeFixed ? parseFloat(updatedSeller.pixPayoutFeeFixed.toString()) : null,
-      manualWithdrawFeePercent: updatedSeller.manualWithdrawFeePercent ? parseFloat(updatedSeller.manualWithdrawFeePercent.toString()) : null,
-      manualWithdrawFeeFixed: updatedSeller.manualWithdrawFeeFixed ? parseFloat(updatedSeller.manualWithdrawFeeFixed.toString()) : null,
-      usdtPurchaseFeePercent: updatedSeller.usdtPurchaseFeePercent ? parseFloat(updatedSeller.usdtPurchaseFeePercent.toString()) : null,
-      usdtPurchaseFeeFixed: updatedSeller.usdtPurchaseFeeFixed ? parseFloat(updatedSeller.usdtPurchaseFeeFixed.toString()) : null,
-    };
+    // Create audit log
+    await auditService.log({
+      userId: currentUser.id,
+      action: AuditAction.SELLER_FEE_UPDATED,
+      category: AuditCategory.SELLER_MANAGEMENT,
+      severity: AuditSeverity.MEDIUM,
+      metadata: {
+        sellerId: sellerId,
+        sellerEmail: currentSeller.email,
+        updatedFields: body,
+        previousValues: {
+          exchangeRateFeePercent: currentSeller.exchangeRateFeePercent?.toString(),
+          pixPayinFeePercent: currentSeller.pixPayinFeePercent?.toString(),
+          pixPayoutFeePercent: currentSeller.pixPayoutFeePercent?.toString(),
+        },
+      },
+      ipAddress,
+      userAgent,
+    });
 
-    // Log audit event for seller changes
-    try {
-      await auditService.logEvent({
-        action: AuditAction.USER_PROFILE_UPDATE,
-        category: AuditCategory.ADMINISTRATIVE,
-        severity: AuditSeverity.MEDIUM,
-        description: `Taxas do seller alteradas: ${currentSeller.name} (${currentSeller.email})`,
-        success: true,
-        userId: currentUser.id,
-        ipAddress,
-        userAgent,
-        resource: 'seller',
-        resourceId: sellerId,
-        details: {
-          sellerName: currentSeller.name,
-          sellerEmail: currentSeller.email,
-          changesCount: changes.length,
-          changes: changes.map(change => ({
-            field: change.field,
-            oldValue: change.oldValue,
-            newValue: change.newValue
-          })),
-          adminId: currentUser.id,
-          adminEmail: currentUser.email,
-          timestamp: new Date().toISOString()
-        }
-      });
-    } catch (auditError) {
-      console.error('Failed to log seller update audit:', auditError);
-    }
-
-    const responseTime = Date.now() - startTime;
-    console.log(`✅ Seller fees updated: ${sellerId} in ${responseTime}ms`);
+    console.log(`✅ Fees updated successfully for seller ${sellerId}`);
 
     return NextResponse.json({
       success: true,
       message: 'Taxas atualizadas com sucesso',
-      seller: formattedSeller
+      seller: updatedSeller
     });
 
   } catch (error) {

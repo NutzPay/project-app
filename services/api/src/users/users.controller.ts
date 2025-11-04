@@ -81,4 +81,11 @@ export class UsersController {
   remove(@Param('id') id: string) {
     return this.usersService.delete(id);
   }
+
+  @ApiOperation({ summary: 'Get company fees for current user' })
+  @ApiResponse({ status: 200, description: 'Company fees retrieved successfully' })
+  @Get('me/company-fees')
+  getMyCompanyFees(@Request() req) {
+    return this.usersService.getCompanyFees(req.user.companyId);
+  }
 }
